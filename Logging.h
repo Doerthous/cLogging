@@ -33,6 +33,126 @@
 #ifndef _LOGGER_H_
 #define _LOGGER_H_
 
+/*
+
+## Log Format
+
+[level] [time] [datetime] module [file line]: message
+
+## Usage
+
+### Basic Interface
+
+```
+#include "Logging.h"
+
+int main()
+{
+    int b[] = {1,2,3,4,5,6,7,8,9,10};
+    LOG_DEBUG("%d", 1);
+    LOG_BUFFER("buff: ", b, 10);
+    LOG_BUFFER("buff 2: ", b, 10);
+    LOG_ERROR("error x %d", 1);
+	LOG_INFO("%d", 1);
+	LOG_WARN("%d", 1);
+    LOG_ERROR("error ss");
+    return 0;
+}
+```
+
+### Extend Interface
+
+```
+#include "Logging.h"
+int main()
+{
+	int a[] = { 1, 2, 2, 3 };
+	const char *ret[] = { "ok", "ok", "error", "ok" };
+	for (int i = 0; i < 4; ++i) {
+		LOG_IF_CHANGED(a[i], "%s", ret[i]);
+	}
+
+	int b = 1;
+	LOG_IF(b == 1, "ok");
+	LOG_IF(b == 0, "error");
+	b = !b;
+	LOG_IF(b == 1, "error");
+	LOG_IF(b == 0, "ok");
+
+    return 0;
+}
+```
+
+### Multi-Thread
+
+```
+#include <mutex>
+#include <thread>
+std::mutex lock;
+FILE *log_file;
+
+#define LOGGING_LOG_LEVELFLAG
+#define LOGGING_LOG_TIME
+#define LOGGING_LOG_LOCKING
+#define LOGGING_LOCK() lock.lock()
+#define LOGGING_UNLOCK() lock.unlock()
+#define LOGGING_LOG_THREAD
+#define LOGGING_LOG_RECORD_LIST logging_log_record_list
+#define LOGGING_LOG_MAX_SIZE 10240000
+#define LOGGING_LOG_DIRECTION log_file
+#include "Logging.h"
+log_record_t logging_log_record_list;
+
+int main()
+{
+    log_file = fopen("log.txt", "w");
+
+    bool running = true;
+    std::thread t4 = std::thread([](){
+        for (int i = 0; i < 10000; ++i) {
+            LOG_INFO("t4 %d", i);
+        }
+    });
+    std::thread t3 = std::thread([](){
+        for (int i = 0; i < 10000; ++i) {
+            LOG_ERROR("t3 %d", i);
+        }
+    });
+    std::thread t2 = std::thread([](){
+        for (int i = 0; i < 10000; ++i) {
+            LOG_WARN("t2 %d", i);
+        }
+    });
+    std::thread t1 = std::thread([&running](){
+        while (running) {
+            LOGGING_THREAD_LOOP(&logging_log_record_list);
+        }
+    });
+
+    t4.join();
+    t3.join();
+    t2.join();
+    running = false;
+    t1.join();
+
+    fclose(log_file);
+
+    return 0;
+}
+```
+## Config
+
+
+
+## TODO
+
+- multi-direction output
+
+```
+
+*/
+
+
 # include <stdint.h>
 # include <stdio.h>
 # include <stdlib.h>
@@ -85,7 +205,7 @@ typedef struct log_record
 #  define LOGGING_INFO_FLAG
 #  define LOGGING_WARN_FLAG
 #  define LOGGING_ERROR_FLAG
-#  define LOGGING_GET_LOG_LEVEL(log_record, level, level_flag) (0)
+#  define LOGGING_GET_LOG_LEVEL(log_record, level, level_flag)
 #  define LOGGING_LEVEL_FMT
 #  define LOGGING_LEVEL_VAL(log_record)
 # else
@@ -101,12 +221,12 @@ typedef struct log_record
 #  ifndef LOGGING_ERROR_FLAG
 #   define LOGGING_ERROR_FLAG "[E]"
 #  endif
-   static inline void *LOGGING_GET_LOG_LEVEL(log_record_t *log_record,
+   static inline void *LOGGING_GET_LOG_LEVEL(log_record_t *log_record, 
     int level, const char *level_flag)
-    {
+    { 
         log_record->level = level;
         log_record->level_flag = level_flag;
-        return log_record;
+		return log_record;
     }
 #  define LOGGING_LEVEL_FMT "%s"
 #  define LOGGING_LEVEL_VAL(log_record) , (log_record)->level_flag
@@ -121,21 +241,21 @@ typedef struct log_record
 # ifndef LOGGING_LOG_MODULE
 #  define LOGGING_MODULE_FMT
 #  define LOGGING_MODULE_VAL(log_record)
-#  define LOGGING_GET_LOG_MODULE(log_record) (0)
+#  define LOGGING_GET_LOG_MODULE(log_record)
 # else
 #  define LOGGING_MODULE_FMT "%s"
 #  define LOGGING_MODULE_VAL(log_record) , (log_record)->module
    static inline void *LOGGING_GET_LOG_MODULE(log_record_t *log_record)
     {
         log_record->module = LOGGING_LOG_MODULE;
-        return log_record;
+		return log_record;
     }
 # endif
 
 # ifndef LOGGING_LOG_FILELINE
 #  define LOGGING_FILELINE_FMT
 #  define LOGGING_FILELINE_VAL(log_record)
-#  define LOGGING_GET_LOG_FILELINE(log_record) (0)
+#  define LOGGING_GET_LOG_FILELINE(log_record)
 # else
 #  define __STR(x) #x
 #  define STR(x) __STR(x)
@@ -149,20 +269,20 @@ typedef struct log_record
 # endif
 
 # ifndef LOGGING_LOG_TIME
-#  define LOGGING_GET_LOG_TIME(log_record) (0)
+#  define LOGGING_GET_LOG_TIME(log_record)
 #  define LOGGING_TIME_FMT
 #  define LOGGING_TIME_VAL(log_record)
 # else
 #  define LOGGING_TIME_FMT "[%.6lf]"
 #  define LOGGING_TIME_VAL(log_record) , (log_record)->time/1e6
-#  if defined(__linux) || defined(__CYGWIN__)
+#  if defined(__linux)
 #   include <sys/time.h>
     static inline void *LOGGING_GET_LOG_TIME(log_record_t *log_record)
     {
         struct timeval tv;
         gettimeofday(&tv, NULL);
         log_record->time = (int64_t)tv.tv_sec * 100000 + tv.tv_usec;
-        return log_record;
+		return log_record;
     }
 #  elif defined(_WIN32) || defined(_WIN64)
 #   include <windows.h>
@@ -173,13 +293,13 @@ typedef struct log_record
         li.LowPart = ft.dwLowDateTime;
         li.HighPart = ft.dwHighDateTime;
         log_record->time = (li.QuadPart - 116444736000000000UL)/10;
-        return log_record;
+		return log_record;
     }
 #  endif
 # endif
 
 # if defined(LOGGING_LOG_DIRECTION) && (LOGGING_LOG_MAX_SIZE > 0)
-#  if defined(__linux) || defined(__CYGWIN__)
+#  if defined(__linux)
 #   include <unistd.h>
 #   define LOGGING_FILE_TRUNCATE(file, size) ftruncate(fileno(file), size)
 #  elif defined(_WIN32) || defined(_WIN64)
@@ -206,7 +326,7 @@ typedef struct log_record
 # endif
 
 # ifndef LOGGING_LOG_DATETIME
-#  define LOGGING_GET_LOG_DATETIME(log_record) (0)
+#  define LOGGING_GET_LOG_DATETIME(log_record)
 #  define LOGGING_DATETIME_FMT
 #  define LOGGING_DATETIME_VAL(log_record)
 # else
@@ -215,7 +335,7 @@ typedef struct log_record
     {
         time_t tm; time(&tm);
         log_record->datetime = localtime(&tm);
-        return log_record;
+		return log_record;
     }
 #  define LOGGING_DATETIME_FMT "[%04d-%02d-%02d %02d:%02d:%02d]"
 #  define LOGGING_DATETIME_VAL(log_record) \
@@ -232,14 +352,14 @@ typedef struct log_record
 #  define LOGGING_INFO_COLOR
 #  define LOGGING_WARN_COLOR
 #  define LOGGING_ERROR_COLOR
-#  define LOGGING_GET_LOG_COLOR(log_record, color) (0)
+#  define LOGGING_GET_LOG_COLOR(log_record, color)
 #  define LOGGING_COLOR_BEGIN(log_record)
 #  define LOGGING_COLOR_END(log_record)
 # else
 #  if defined(LOGGING_LOG_DIRECTION)
-#   error Color feature only support with stdout
+#   error Invalid color feature with log direction changed.
 #  endif
-#  if defined(__linux) || defined(__CYGWIN__)
+#  if defined(__linux)
 #   define LOGGING_DEBUG_COLOR ((void *)"\033[37m")
 #   define LOGGING_INFO_COLOR ((void *)"\033[0m")
 #   define LOGGING_WARN_COLOR ((void *)"\033[1m\033[33m")
@@ -250,7 +370,6 @@ typedef struct log_record
         fprintf(LOGGING_DIRECTION, "%s", (const char *)color); \
     } while (0)
 #  elif defined(_WIN32) || defined(_WIN64)
-#  include <windows.h>
 #   define LOGGING_DEBUG_COLOR ((void *)FOREGROUND_INTENSITY)
 #   define LOGGING_INFO_COLOR  ((void *)0x07)
 #   define LOGGING_WARN_COLOR  ((void *)0x07)
@@ -269,7 +388,7 @@ typedef struct log_record
     {
         log_record->color_begin = (void *)color;
         log_record->color_end = (void *)LOGGING_CLEAR_COLOR;
-        return log_record;
+		return log_record;
     }
 #  define LOGGING_COLOR_BEGIN(log_record) \
     LOGGING_COLOR_SET((log_record)->color_begin)
@@ -288,7 +407,7 @@ typedef struct log_record
     {
         char *format;
         int format_size, format_len, would_written;
-
+        
         format = &(log_record->message) + log_record->message_len+1;
         format_size = log_record->message_size - log_record->message_len-1;
         would_written = format_len = 0;
@@ -372,37 +491,37 @@ typedef struct log_record
     LOGGING_COLOR_END(log_record); \
     LOGGING_LOG_ROLLBACK((log_record)->direction); \
 } while (0)
-# if defined(__linux) || defined(__MINGW32__) || defined(__CYGWIN__)
+# if defined(__linux)
 #  define LOGGING_LOG_RECORD_INIT(memory, size, LEVEL) \
-    ({ \
-        memset(memory, 0, size); \
-        ((log_record_t *)memory)->direction = LOGGING_DIRECTION; \
-        ((log_record_t *)memory)->message_size = size - sizeof(log_record_t); \
-        LOGGING_GET_LOG_LEVEL((log_record_t *)memory, \
+	({ \
+		memset(memory, 0, size); \
+		((log_record_t *)memory)->direction = LOGGING_DIRECTION; \
+		((log_record_t *)memory)->message_size = size - sizeof(log_record_t); \
+		LOGGING_GET_LOG_LEVEL((log_record_t *)memory, \
             LOGGING_##LEVEL##_LEVEL, LOGGING_##LEVEL##_FLAG); \
-        LOGGING_GET_LOG_FILELINE((log_record_t *)memory); \
-        LOGGING_GET_LOG_MODULE((log_record_t *)memory); \
-        LOGGING_GET_LOG_COLOR((log_record_t *)memory, \
+		LOGGING_GET_LOG_FILELINE((log_record_t *)memory); \
+		LOGGING_GET_LOG_MODULE((log_record_t *)memory); \
+		LOGGING_GET_LOG_COLOR((log_record_t *)memory, \
             LOGGING_##LEVEL##_COLOR); \
-        LOGGING_GET_LOG_TIME((log_record_t *)memory); \
-        LOGGING_GET_LOG_DATETIME((log_record_t *)memory); \
-        (log_record_t *)memory; \
+		LOGGING_GET_LOG_TIME((log_record_t *)memory); \
+		LOGGING_GET_LOG_DATETIME((log_record_t *)memory); \
+		(log_record_t *)memory; \
     })
 # elif defined(_WIN32) || defined(_WIN64)
 #  define LOGGING_LOG_RECORD_INIT(memory, size, LEVEL) \
-    ( \
-        (memset(memory, 0, size)), \
-        (((log_record_t *)memory)->direction = LOGGING_DIRECTION), \
-        (((log_record_t *)memory)->message_size = size - sizeof(log_record_t)),\
-        (LOGGING_GET_LOG_LEVEL((log_record_t *)memory, \
+	( \
+		(memset(memory, 0, size)), \
+		(((log_record_t *)memory)->direction = LOGGING_DIRECTION), \
+		(((log_record_t *)memory)->message_size = size - sizeof(log_record_t)), \
+		(LOGGING_GET_LOG_LEVEL((log_record_t *)memory, \
             LOGGING_##LEVEL##_LEVEL, LOGGING_##LEVEL##_FLAG)), \
-        (LOGGING_GET_LOG_FILELINE((log_record_t *)memory)), \
-        (LOGGING_GET_LOG_MODULE((log_record_t *)memory)), \
-        (LOGGING_GET_LOG_COLOR((log_record_t *)memory, \
+		(LOGGING_GET_LOG_FILELINE((log_record_t *)memory)), \
+		(LOGGING_GET_LOG_MODULE((log_record_t *)memory)), \
+		(LOGGING_GET_LOG_COLOR((log_record_t *)memory, \
             LOGGING_##LEVEL##_COLOR)), \
-        (LOGGING_GET_LOG_TIME((log_record_t *)memory)), \
-        (LOGGING_GET_LOG_DATETIME((log_record_t *)memory)), \
-        ((log_record_t *)memory) \
+		(LOGGING_GET_LOG_TIME((log_record_t *)memory)), \
+		(LOGGING_GET_LOG_DATETIME((log_record_t *)memory)), \
+		((log_record_t *)memory) \
     )
 # endif
 
@@ -433,14 +552,14 @@ typedef struct log_record
 #  ifndef LOGGING_LOG_LOCKING
 #   error You need to enable LOGGING_LOG_LOCKING
 #  endif
-#  define LOGGING_WRITE_RECORD(logger) do \
+#  define LOGGING_WRITE_RECORD(log_record) do \
     { \
         LOGGING_LOCK(); \
-        logger->next = LOGGING_LOG_RECORD_LIST.next; \
-        LOGGING_LOG_RECORD_LIST.next = logger; \
+        log_record->next = LOGGING_LOG_RECORD_LIST.next; \
+        LOGGING_LOG_RECORD_LIST.next = log_record; \
         LOGGING_UNLOCK(); \
     } while (0)
-#  define LOGGING_MALLOC(ptr, size) ptr = (log_record_t*)malloc(size);
+#  define LOGGING_MALLOC(ptr, size) ptr = (log_record_t*)malloc(size); 
 #  define LOGGING_FREE(ptr) free(ptr)
 #  define LOGGING_THREAD_LOOP(log_record_list) do \
     { \
@@ -480,7 +599,7 @@ static inline void LOG_LEVEL(log_record_t *logger, const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
-    /* TODO: if message_len > message_size, than error */
+	/* TODO: if message_len > message_size, than error */ 
     logger->message_len = vsnprintf(
         (&logger->message), logger->message_size, fmt, args);
     va_end(args);
@@ -492,7 +611,7 @@ static inline void LOG_LEVEL(log_record_t *logger, const char *fmt, ...)
     log_record_t *logger; \
     LOGGING_MALLOC(logger, LOGGING_LOG_RECORD_SIZE); \
     LOGGING_LOG_RECORD_INIT(logger, LOGGING_LOG_RECORD_SIZE, LEVEL); \
-    LOG_LEVEL(logger, fmt "\n", ##__VA_ARGS__); \
+	LOG_LEVEL(logger, fmt "\n", ##__VA_ARGS__); \
 } while (0)
 # if LOGGING_LOG_LEVEL >= LOGGING_DEBUG_LEVEL
 #  undef DEBUG /* TODO: such undef may cause problem */
@@ -529,7 +648,7 @@ static inline void LOG_LEVEL(log_record_t *logger, const char *fmt, ...)
         LOGGING_MALLOC(logger, LOGGING_LOG_RECORD_SIZE); \
         logger = LOGGING_LOG_RECORD_INIT(logger, \
             LOGGING_LOG_RECORD_SIZE, DEBUG); \
-        /* TODO: if message_len > message_size, then error */ \
+        /* TODO: if message_len > message_size, than error */ \
         logger->message_len += snprintf( \
             (&logger->message)+logger->message_len, \
             logger->message_size-logger->message_len, \
@@ -546,19 +665,17 @@ static inline void LOG_LEVEL(log_record_t *logger, const char *fmt, ...)
 
 #  define LOG_IF(expr, fmt, ...) if (expr) LOG_DEBUG(fmt, ##__VA_ARGS__)
 #  define LOG_IF_CHANGED(var, fmt, ...) do \
-    { \
-        static char mem[sizeof(var)]; \
-        if (memcmp(mem, &var, sizeof(mem)) != 0) { \
-            memcpy(mem, &var, sizeof(mem)); \
-            LOG_DEBUG(fmt, ##__VA_ARGS__); \
-        } \
-    } while (0)
-#  define LOG_ELSE(fmt, ...) else LOG_DEBUG(fmt, ##__VA_ARGS__)
+	{ \
+		static char mem[sizeof(var)]; \
+		if (memcmp(mem, &var, sizeof(mem)) != 0) { \
+			memcpy(mem, &var, sizeof(mem)); \
+			LOG_DEBUG(fmt, ##__VA_ARGS__); \
+		} \
+	} while (0)
 # else
 #  define LOG_BUFFER(...)
 #  define LOG_IF(...)
 #  define LOG_IF_CHANGED(...)
-#  define LOG_ELSE(...)
 # endif
 
 #endif // _LOGGER_H_

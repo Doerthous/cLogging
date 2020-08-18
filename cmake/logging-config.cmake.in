@@ -1,0 +1,1 @@
+include(${CMAKE_CURRENT_LIST_DIR}/${CMAKE_BUILD_TYPE}/logging.cmake)
