@@ -671,10 +671,12 @@ static inline void LOG_LEVEL(log_record_t *logger, const char *fmt, ...)
             LOG_DEBUG(fmt, ##__VA_ARGS__); \
         } \
     } while (0)
+#  define LOG_ELSE(fmt, ...) else LOG_DEBUG(fmt, ##__VA_ARGS__)
 # else
 #  define LOG_BUFFER(...)
 #  define LOG_IF(...)
 #  define LOG_IF_CHANGED(...)
+#  define LOG_ELSE(...)
 # endif
 
 #endif // _LOGGER_H_
