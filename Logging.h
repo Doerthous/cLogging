@@ -33,125 +33,6 @@
 #ifndef _LOGGER_H_
 #define _LOGGER_H_
 
-/*
-
-## Log Format
-
-[level] [time] [datetime] module [file line]: message
-
-## Usage
-
-### Basic Interface
-
-```
-#include "Logging.h"
-
-int main()
-{
-    int b[] = {1,2,3,4,5,6,7,8,9,10};
-    LOG_DEBUG("%d", 1);
-    LOG_BUFFER("buff: ", b, 10);
-    LOG_BUFFER("buff 2: ", b, 10);
-    LOG_ERROR("error x %d", 1);
-    LOG_INFO("%d", 1);
-    LOG_WARN("%d", 1);
-    LOG_ERROR("error ss");
-    return 0;
-}
-```
-
-### Extend Interface
-
-```
-#include "Logging.h"
-int main()
-{
-    int a[] = { 1, 2, 2, 3 };
-    const char *ret[] = { "ok", "ok", "error", "ok" };
-    for (int i = 0; i < 4; ++i) {
-        LOG_IF_CHANGED(a[i], "%s", ret[i]);
-    }
-
-    int b = 1;
-    LOG_IF(b == 1, "ok");
-    LOG_IF(b == 0, "error");
-    b = !b;
-    LOG_IF(b == 1, "error");
-    LOG_IF(b == 0, "ok");
-
-    return 0;
-}
-```
-
-### Multi-Thread
-
-```
-#include <mutex>
-#include <thread>
-std::mutex lock;
-FILE *log_file;
-
-#define LOGGING_LOG_LEVELFLAG
-#define LOGGING_LOG_TIME
-#define LOGGING_LOG_LOCKING
-#define LOGGING_LOCK() lock.lock()
-#define LOGGING_UNLOCK() lock.unlock()
-#define LOGGING_LOG_THREAD
-#define LOGGING_LOG_RECORD_LIST logging_log_record_list
-#define LOGGING_LOG_MAX_SIZE 10240000
-#define LOGGING_LOG_DIRECTION log_file
-#include "Logging.h"
-log_record_t logging_log_record_list;
-
-int main()
-{
-    log_file = fopen("log.txt", "w");
-
-    bool running = true;
-    std::thread t4 = std::thread([](){
-        for (int i = 0; i < 10000; ++i) {
-            LOG_INFO("t4 %d", i);
-        }
-    });
-    std::thread t3 = std::thread([](){
-        for (int i = 0; i < 10000; ++i) {
-            LOG_ERROR("t3 %d", i);
-        }
-    });
-    std::thread t2 = std::thread([](){
-        for (int i = 0; i < 10000; ++i) {
-            LOG_WARN("t2 %d", i);
-        }
-    });
-    std::thread t1 = std::thread([&running](){
-        while (running) {
-            LOGGING_THREAD_LOOP(&logging_log_record_list);
-        }
-    });
-
-    t4.join();
-    t3.join();
-    t2.join();
-    running = false;
-    t1.join();
-
-    fclose(log_file);
-
-    return 0;
-}
-```
-## Config
-
-
-
-## TODO
-
-- multi-direction output
-
-```
-
-*/
-
 # include <stdint.h>
 # include <stdio.h>
 # include <stdlib.h>
@@ -369,6 +250,7 @@ typedef struct log_record
         fprintf(LOGGING_DIRECTION, "%s", (const char *)color); \
     } while (0)
 #  elif defined(_WIN32) || defined(_WIN64)
+#  include <windows.h>
 #   define LOGGING_DEBUG_COLOR ((void *)FOREGROUND_INTENSITY)
 #   define LOGGING_INFO_COLOR  ((void *)0x07)
 #   define LOGGING_WARN_COLOR  ((void *)0x07)
@@ -647,7 +529,7 @@ static inline void LOG_LEVEL(log_record_t *logger, const char *fmt, ...)
         LOGGING_MALLOC(logger, LOGGING_LOG_RECORD_SIZE); \
         logger = LOGGING_LOG_RECORD_INIT(logger, \
             LOGGING_LOG_RECORD_SIZE, DEBUG); \
-        /* TODO: if message_len > message_size, than error */ \
+        /* TODO: if message_len > message_size, then error */ \
         logger->message_len += snprintf( \
             (&logger->message)+logger->message_len, \
             logger->message_size-logger->message_len, \
