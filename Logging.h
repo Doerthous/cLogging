@@ -112,12 +112,6 @@ typedef struct log_record
 #  define LOGGING_LEVEL_VAL(log_record) , (log_record)->level_flag
 # endif
 
-# ifndef LOGGING_LOG_DIRECTION
-#  define LOGGING_DIRECTION stdout
-# else
-#  define LOGGING_DIRECTION LOGGING_LOG_DIRECTION
-# endif
-
 # ifndef LOGGING_LOG_MODULE
 #  define LOGGING_MODULE_FMT
 #  define LOGGING_MODULE_VAL(log_record)
@@ -178,33 +172,6 @@ typedef struct log_record
 #  endif
 # endif
 
-# if defined(LOGGING_LOG_DIRECTION) && (LOGGING_LOG_MAX_SIZE > 0)
-#  if defined(__linux) || defined(__CYGWIN__)
-#   include <unistd.h>
-#   define LOGGING_FILE_TRUNCATE(file, size) ftruncate(fileno(file), size)
-#  elif defined(_WIN32) || defined(_WIN64)
-#   include <io.h>
-#   define LOGGING_FILE_TRUNCATE(file, size) _chsize(_fileno(file), size)
-#  endif
-    #define LOGGING_LOG_ROLLBACK(log_file) do \
-    { \
-        if (log_file != stdout) { \
-            long org = ftell(log_file); \
-            fseek(log_file, 0L, SEEK_END); \
-            long pos = ftell(log_file); \
-            if (pos > LOGGING_LOG_MAX_SIZE) { \
-                LOGGING_FILE_TRUNCATE(log_file, 0); \
-                fseek(log_file, 0L, SEEK_SET); \
-            } \
-            else { \
-                fseek(log_file, org, SEEK_SET); \
-            } \
-        } \
-    } while (0)
-# else
-#  define LOGGING_LOG_ROLLBACK(log_file)
-# endif
-
 # ifndef LOGGING_LOG_DATETIME
 #  define LOGGING_GET_LOG_DATETIME(log_record) (0)
 #  define LOGGING_DATETIME_FMT
@@ -227,6 +194,18 @@ typedef struct log_record
     , (log_record)->datetime->tm_sec
 # endif
 
+/******************************************************************************/
+// Logging Direction
+/******************************************************************************/
+# ifndef LOGGING_LOG_DIRECTION
+#  define LOGGING_DIRECTION stdout
+# else
+#  define LOGGING_DIRECTION LOGGING_LOG_DIRECTION
+# endif
+
+/******************************************************************************/
+// Logging Color
+/******************************************************************************/
 # if !defined(LOGGING_LOG_COLOR)
 #  define LOGGING_DEBUG_COLOR
 #  define LOGGING_INFO_COLOR
@@ -275,6 +254,36 @@ typedef struct log_record
     LOGGING_COLOR_SET((log_record)->color_begin)
 #  define LOGGING_COLOR_END(log_record) \
     LOGGING_COLOR_SET((log_record)->color_end)
+# endif
+
+/******************************************************************************/
+// Logging File Truncate Support
+/******************************************************************************/
+# if defined(LOGGING_LOG_DIRECTION) && (LOGGING_LOG_MAX_SIZE > 0)
+#  if defined(__linux) || defined(__CYGWIN__)
+#   include <unistd.h>
+#   define LOGGING_FILE_TRUNCATE(file, size) ftruncate(fileno(file), size)
+#  elif defined(_WIN32) || defined(_WIN64)
+#   include <io.h>
+#   define LOGGING_FILE_TRUNCATE(file, size) _chsize(_fileno(file), size)
+#  endif
+    #define LOGGING_LOG_ROLLBACK(log_file) do \
+    { \
+        if (log_file != stdout) { \
+            long org = ftell(log_file); \
+            fseek(log_file, 0L, SEEK_END); \
+            long pos = ftell(log_file); \
+            if (pos > LOGGING_LOG_MAX_SIZE) { \
+                LOGGING_FILE_TRUNCATE(log_file, 0); \
+                fseek(log_file, 0L, SEEK_SET); \
+            } \
+            else { \
+                fseek(log_file, org, SEEK_SET); \
+            } \
+        } \
+    } while (0)
+# else
+#  define LOGGING_LOG_ROLLBACK(log_file)
 # endif
 
 # if defined(LOGGING_LOG_LEVELFLAG) || defined(LOGGING_LOG_FILELINE) \
@@ -470,7 +479,6 @@ typedef struct log_record
 #  define LOGGING_FREE(ptr)
 #  define LOGGING_THREAD_LOOP(dummy)
 # endif
-
 
 /******************************************************************************/
 // Basic Interfaces
