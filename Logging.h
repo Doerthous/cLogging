@@ -562,11 +562,13 @@ static inline void LOG_LEVEL(log_record_t *logger, const char *fmt, ...)
         } \
     } while (0)
 #  define LOG_ELSE(fmt, ...) else LOG_DEBUG(fmt, ##__VA_ARGS__)
+#  define LOG_DEBUG_VAR(type, name, init) type name = init
 # else
 #  define LOG_BUFFER(...)
 #  define LOG_IF(...)
 #  define LOG_IF_CHANGED(...)
 #  define LOG_ELSE(...)
+#  define LOG_DEBUG_VAR(type, name, init)
 # endif
 
 #endif // _LOGGER_H_
