@@ -69,11 +69,14 @@ The following formats are supported for logging. Each element can be controlled 
 - LOGGING_LOG_LEVELFLAG
 
   This macro will enable logging level flag output.
+  
   ```C
   #define LOGGING_LOG_LEVELFLAG
   #include "logging.h"
   ```
+  
   You can change the logging level flag by define the following macros:
+  
   ```C
   #define LOGGING_DEBUG_FLAG "[DEBUG]"
   #define LOGGING_INFO_FLAG "[INFO]"
@@ -82,23 +85,30 @@ The following formats are supported for logging. Each element can be controlled 
   #define LOGGING_LOG_LEVELFLAG
   #include "logging.h"
   ```
+
 - LOGGING_LOG_DIRECTION
   
-  This macro, which defines a FILE * handle, determines where the log record will be written to.
+  `LOGGING_DIRECTION` macro, which defines a FILE * handle, determines where the log record will be written to.
+  
   ```C
   #define LOGGING_LOG_DIRECTION stdout
+  #define LOGGING_DIRECTION stdout
   #include "logging.h"
   ```
+
 - LOGGING_LOG_MODULE  
 
   This macro defines a name for module.
+
   ```C
   #define LOGGING_LOG_MODULE "ModuleA"
   #include "logging.h"
   ```
+
 - LOGGING_LOG_FILELINE
 
   This macro enable logging with file name and line number.
+
   ```C
   #define LOGGING_LOG_FILELINE
   #include "logging.h"
@@ -107,6 +117,7 @@ The following formats are supported for logging. Each element can be controlled 
 - LOGGING_LOG_TIME
 
   This macro enable logging with timestamp.
+
   ```C
   #define LOGGING_LOG_TIME
   #include "logging.h"
@@ -115,6 +126,7 @@ The following formats are supported for logging. Each element can be controlled 
 - LOGGING_LOG_DATETIME
 
   This macro enable logging with datetime.
+
   ```C
   #define LOGGING_LOG_DATETIME
   #include "logging.h"
@@ -123,6 +135,7 @@ The following formats are supported for logging. Each element can be controlled 
 - LOGGING_LOG_FUNCTION
 
   This macro enable logging with function name.
+
   ```C
   #define LOGGING_LOG_FUNCTION
   #include "logging.h"
@@ -131,6 +144,7 @@ The following formats are supported for logging. Each element can be controlled 
 - LOGGING_LOG_COLOR
 
   This macro enable logging with different color for different logging level. It can only be used when logging to stdout.
+  
   ```C
   #define LOGGING_LOG_COLOR
   #include "logging.h"
