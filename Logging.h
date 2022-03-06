@@ -1,6 +1,6 @@
 /*******************************************************************************
 
-  Copyright © 2020
+  Copyright © 2019~2022
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the “Software”), to deal
@@ -30,8 +30,8 @@
 
 *******************************************************************************/
 
-#ifndef _LOGGER_H_
-#define _LOGGER_H_
+#ifndef LOGGING_H_
+# define LOGGING_H_
 
 # include <stdint.h>
 # include <stdio.h>
@@ -597,4 +597,16 @@ static inline void LOG_LEVEL(log_record_t *logger, const char *fmt, ...)
 #  define LOG_DEBUG_VAR(type, name, init)
 # endif
 
-#endif // _LOGGER_H_
+#else
+
+# define LOG_DEBUG(fmt, ...)
+# define LOG_INFO(fmt, ...)
+# define LOG_WARN(fmt, ...)
+# define LOG_ERROR(fmt, ...)
+# define LOG_BUFFER(...)
+# define LOG_IF(...)
+# define LOG_IF_CHANGED(...)
+# define LOG_ELSE(...)
+# define LOG_DEBUG_VAR(type, name, init)
+
+#endif // LOGGING_H_
