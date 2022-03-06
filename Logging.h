@@ -235,8 +235,8 @@ typedef struct log_record
 #  if defined(__linux) || defined(__CYGWIN__)
 #   define LOGGING_DEBUG_COLOR ((void *)"\033[37m")
 #   define LOGGING_INFO_COLOR ((void *)"\033[0m")
-#   define LOGGING_WARN_COLOR ((void *)"\033[1m\033[33m")
-#   define LOGGING_ERROR_COLOR ((void *)"\033[1m\033[31m")
+#   define LOGGING_WARN_COLOR ((void *)"\033[1;33;40m")
+#   define LOGGING_ERROR_COLOR ((void *)"\033[1;31;40m")
 #   define LOGGING_CLEAR_COLOR ((void *)"\033[0m")
 #   define LOGGING_COLOR_SET(color) do \
     { \
@@ -246,7 +246,7 @@ typedef struct log_record
 #  include <windows.h>
 #   define LOGGING_DEBUG_COLOR ((void *)FOREGROUND_INTENSITY)
 #   define LOGGING_INFO_COLOR  ((void *)0x07)
-#   define LOGGING_WARN_COLOR  ((void *)0x07)
+#   define LOGGING_WARN_COLOR  ((void *)(FOREGROUND_INTENSITY | FOREGROUND_RED | FOREGROUND_GREEN))
 #   define LOGGING_ERROR_COLOR ((void *)(FOREGROUND_INTENSITY | FOREGROUND_RED))
 #   define LOGGING_CLEAR_COLOR ((void *)0x07)
 #   define LOGGING_COLOR_SET(color) do \
