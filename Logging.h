@@ -48,6 +48,7 @@ typedef struct log_record
     int level;
     const char *level_flag;
     const char *flieline;
+    const char *function;
     int64_t time;
     struct tm *datetime;
     const char *module;
@@ -194,6 +195,19 @@ typedef struct log_record
     , (log_record)->datetime->tm_sec
 # endif
 
+# ifndef LOGGING_LOG_FUNCTION
+#  define LOGGING_FUNCTION_FMT "%s"
+#  define LOGGING_FUNCTION_VAL(log_record)
+#  define LOGGING_GET_LOG_FUNCTION(log_record) (0)
+# else
+#  define LOGGING_FUNCTION_FMT "%s"
+#  define LOGGING_FUNCTION_VAL(log_record) , (log_record)->function
+#  define LOGGING_GET_LOG_FUNCTION(log_record) \
+    ( \
+        (log_record)->function = __FUNCTION__, log_record \
+    )
+# endif
+
 /******************************************************************************/
 // Logging Direction
 /******************************************************************************/
@@ -288,7 +302,7 @@ typedef struct log_record
 
 # if defined(LOGGING_LOG_LEVELFLAG) || defined(LOGGING_LOG_FILELINE) \
     || defined(LOGGING_LOG_TIME) || defined(LOGGING_LOG_DATETIME) \
-    || defined(LOGGING_LOG_MODULE)
+    || defined(LOGGING_LOG_MODULE) || defined(LOGGING_LOG_FUNCTION)
 #  define FORMAT_SPACE " "
 #  define FORMAT_COLON ":" FORMAT_SPACE
 #  define LOGGING_LOG_SEPERATOR_FMT "%s"
@@ -304,7 +318,7 @@ typedef struct log_record
 
         #ifdef LOGGING_LOG_LEVELFLAG
             would_written = snprintf(format, format_size,
-                LOGGING_LEVEL_FMT
+                " " LOGGING_LEVEL_FMT + !format_len
                 LOGGING_LEVEL_VAL(log_record));
             // assert(would_written < format_size)
             format_len += would_written;
@@ -346,6 +360,16 @@ typedef struct log_record
             would_written = snprintf(format, format_size,
                 " " LOGGING_FILELINE_FMT + !format_len
                 LOGGING_FILELINE_VAL(log_record));
+            // assert(would_written < format_size)
+            format_len += would_written;
+            format_size -= would_written;
+            format += would_written;
+        #endif
+
+        #ifdef LOGGING_LOG_FUNCTION
+            would_written = snprintf(format, format_size,
+                " " LOGGING_FUNCTION_FMT + !format_len
+                LOGGING_FUNCTION_VAL(log_record));
             // assert(would_written < format_size)
             format_len += would_written;
             format_size -= would_written;
@@ -395,6 +419,7 @@ typedef struct log_record
             LOGGING_##LEVEL##_COLOR); \
         LOGGING_GET_LOG_TIME((log_record_t *)memory); \
         LOGGING_GET_LOG_DATETIME((log_record_t *)memory); \
+        LOGGING_GET_LOG_FUNCTION((log_record_t *)memory); \
         (log_record_t *)memory; \
     })
 # elif defined(_WIN32) || defined(_WIN64)
@@ -411,6 +436,7 @@ typedef struct log_record
             LOGGING_##LEVEL##_COLOR)), \
         (LOGGING_GET_LOG_TIME((log_record_t *)memory)), \
         (LOGGING_GET_LOG_DATETIME((log_record_t *)memory)), \
+        (LOGGING_GET_LOG_FUNCTION((log_record_t *)memory)), \
         ((log_record_t *)memory) \
     )
 # endif
