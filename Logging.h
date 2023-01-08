@@ -306,7 +306,8 @@ typedef struct log_record
 #  include <windows.h>
 #   define LOGGING_DEBUG_COLOR ((void *)FOREGROUND_INTENSITY)
 #   define LOGGING_INFO_COLOR  ((void *)0x07)
-#   define LOGGING_WARN_COLOR  ((void *)(FOREGROUND_INTENSITY | FOREGROUND_RED | FOREGROUND_GREEN))
+#   define LOGGING_WARN_COLOR  ((void *)(FOREGROUND_INTENSITY | FOREGROUND_RED \
+                                         | FOREGROUND_GREEN))
 #   define LOGGING_ERROR_COLOR ((void *)(FOREGROUND_INTENSITY | FOREGROUND_RED))
 #   define LOGGING_CLEAR_COLOR ((void *)0x07)
 #   define LOGGING_COLOR_SET(color) do \
@@ -674,7 +675,7 @@ static inline void LOG_LEVEL(log_record_t *logger, const char *fmt, ...)
         log_record_t *logger; \
         LOGGING_MALLOC(logger, LOGGING_LOG_RECORD_SIZE); \
         memset(logger, 0, LOGGING_LOG_RECORD_SIZE); \
-        logger->message_size = LOGGING_LOG_RECORD_SIZE - sizeof(log_record_t); \
+        logger->message_size = LOGGING_LOG_RECORD_SIZE-sizeof(log_record_t); \
         logger->level = LOGGING_DEBUG_LEVEL; \
         LOGGING_GET_LOG_INFO(logger); \
         logger->seperator = FORMAT_SPACE; \
@@ -688,7 +689,7 @@ static inline void LOG_LEVEL(log_record_t *logger, const char *fmt, ...)
             logger->message_len += snprintf( \
                 &(logger->message)+logger->message_len,   \
                 logger->message_size-logger->message_len, \
-                " %02X%s"+!i, buff[i], ((i+1)==cnt) ? "\n" : ""); \
+                " %02X%s"+!i, (uint8_t)(buff[i]), ((i+1)==cnt) ? "\n" : ""); \
         } \
         LOGGING_WRITE_RECORD(logger); \
     } while (0)
