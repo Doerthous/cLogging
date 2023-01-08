@@ -10,6 +10,7 @@
 #define LOGGING_WARN_FLAG "[WARNING]"
 #define LOGGING_ERROR_FLAG "[ERROR]"
 
+#define LOGGING_CONF_DYNAMIC_LOG_LEVEL
 #include "Logging.h"
 
 int main()

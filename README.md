@@ -63,20 +63,20 @@ The following formats are supported for logging. Each element can be controlled 
 ### Log Configuration
 
 - LOGGING_LOG_RECORD_SIZE
-  
+
   This macro control the max size of a single log record. default value is 1024.
 
 - LOGGING_LOG_LEVELFLAG
 
   This macro will enable logging level flag output.
-  
+
   ```C
   #define LOGGING_LOG_LEVELFLAG
   #include "logging.h"
   ```
-  
+
   You can change the logging level flag by define the following macros:
-  
+
   ```C
   #define LOGGING_DEBUG_FLAG "[DEBUG]"
   #define LOGGING_INFO_FLAG "[INFO]"
@@ -87,16 +87,16 @@ The following formats are supported for logging. Each element can be controlled 
   ```
 
 - LOGGING_LOG_DIRECTION
-  
+
   `LOGGING_DIRECTION` macro, which defines a FILE * handle, determines where the log record will be written to.
-  
+
   ```C
   #define LOGGING_LOG_DIRECTION stdout
   #define LOGGING_DIRECTION stdout
   #include "logging.h"
   ```
 
-- LOGGING_LOG_MODULE  
+- LOGGING_LOG_MODULE
 
   This macro defines a name for module.
 
@@ -113,7 +113,7 @@ The following formats are supported for logging. Each element can be controlled 
   #define LOGGING_LOG_FILELINE
   #include "logging.h"
   ```
-  
+
 - LOGGING_LOG_TIME
 
   This macro enable logging with timestamp.
@@ -122,7 +122,7 @@ The following formats are supported for logging. Each element can be controlled 
   #define LOGGING_LOG_TIME
   #include "logging.h"
   ```
-  
+
 - LOGGING_LOG_DATETIME
 
   This macro enable logging with datetime.
@@ -131,7 +131,7 @@ The following formats are supported for logging. Each element can be controlled 
   #define LOGGING_LOG_DATETIME
   #include "logging.h"
   ```
-  
+
 - LOGGING_LOG_FUNCTION
 
   This macro enable logging with function name.
@@ -140,15 +140,35 @@ The following formats are supported for logging. Each element can be controlled 
   #define LOGGING_LOG_FUNCTION
   #include "logging.h"
   ```
-  
+
 - LOGGING_LOG_COLOR
 
   This macro enable logging with different color for different logging level. It can only be used when logging to stdout.
-  
+
   ```C
   #define LOGGING_LOG_COLOR
   #include "logging.h"
   ```
-  
+
 - LOGGING_LOG_LOCKING
 - LOGGING_LOG_THREAD
+- LOGGING_CONF_DYNAMIC_LOG_LEVEL
+
+  This macro enable dynamic logging level config. It use two environment variable(module_LOGGING_LOG_LEVEL & LOGGING_LOG_LEVEL) to control logging switch. For example:
+
+  ```C
+  #define LOGGING_LOG_MODULE "moduleA"
+  #define LOGGING_CONF_DYNAMIC_LOG_LEVEL
+  #include "logging.h"
+  // ...
+  LOG_DEBUG("abc");
+  LOG_ERROR("foo");
+  ```
+
+  with environment variable set as:
+
+  ```sh
+  export moduleA_LOGGING_LOG_LEVEL=2
+  ```
+
+  "abc" will not output.

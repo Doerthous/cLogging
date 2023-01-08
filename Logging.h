@@ -29,7 +29,7 @@
   Author: doerthous <doerthous@gmail.com>
 
 *******************************************************************************/
-
+// Logging
 #ifndef LOGGING_H_
 # define LOGGING_H_
 
@@ -38,9 +38,9 @@
 # include <stdlib.h>
 # include <string.h>
 
-/**
-  * Logging record
-  */
+/******************************************************************************/
+// Logging Record
+/******************************************************************************/
 typedef struct log_record
 {
     struct log_record *next;
@@ -73,6 +73,7 @@ typedef struct log_record
 # ifndef LOGGING_LOG_LEVEL
 #  define LOGGING_LOG_LEVEL LOGGING_DEBUG_LEVEL
 # endif
+# define LOGGING_LEVEL_VALUE(LEVEL) LOGGING_##LEVEL##_LEVEL
 
 /******************************************************************************/
 // Logging Format
@@ -112,6 +113,7 @@ typedef struct log_record
 #  define LOGGING_LEVEL_FMT "%s"
 #  define LOGGING_LEVEL_VAL(log_record) , (log_record)->level_flag
 # endif
+# define LOGGING_LEVELFLAG_VALUE(LEVEL) LOGGING_##LEVEL##_FLAG
 
 # ifndef LOGGING_LOG_MODULE
 #  define LOGGING_MODULE_FMT
@@ -269,6 +271,7 @@ typedef struct log_record
 #  define LOGGING_COLOR_END(log_record) \
     LOGGING_COLOR_SET((log_record)->color_end)
 # endif
+# define LOGGING_COLOR_VALUE(LEVEL) LOGGING_##LEVEL##_COLOR
 
 /******************************************************************************/
 // Logging File Truncate Support
@@ -412,11 +415,11 @@ typedef struct log_record
         ((log_record_t *)memory)->direction = LOGGING_DIRECTION; \
         ((log_record_t *)memory)->message_size = size - sizeof(log_record_t); \
         LOGGING_GET_LOG_LEVEL((log_record_t *)memory, \
-            LOGGING_##LEVEL##_LEVEL, LOGGING_##LEVEL##_FLAG); \
+            LOGGING_LEVEL_VALUE(LEVEL), LOGGING_LEVELFLAG_VALUE(LEVEL)); \
         LOGGING_GET_LOG_FILELINE((log_record_t *)memory); \
         LOGGING_GET_LOG_MODULE((log_record_t *)memory); \
         LOGGING_GET_LOG_COLOR((log_record_t *)memory, \
-            LOGGING_##LEVEL##_COLOR); \
+            LOGGING_COLOR_VALUE(LEVEL)); \
         LOGGING_GET_LOG_TIME((log_record_t *)memory); \
         LOGGING_GET_LOG_DATETIME((log_record_t *)memory); \
         LOGGING_GET_LOG_FUNCTION((log_record_t *)memory); \
@@ -429,11 +432,11 @@ typedef struct log_record
         (((log_record_t *)memory)->direction = LOGGING_DIRECTION), \
         (((log_record_t *)memory)->message_size = size - sizeof(log_record_t)),\
         (LOGGING_GET_LOG_LEVEL((log_record_t *)memory, \
-            LOGGING_##LEVEL##_LEVEL, LOGGING_##LEVEL##_FLAG)), \
+            LOGGING_LEVEL_VALUE(LEVEL), LOGGING_LEVELFLAG_VALUE(LEVEL))), \
         (LOGGING_GET_LOG_FILELINE((log_record_t *)memory)), \
         (LOGGING_GET_LOG_MODULE((log_record_t *)memory)), \
         (LOGGING_GET_LOG_COLOR((log_record_t *)memory, \
-            LOGGING_##LEVEL##_COLOR)), \
+            LOGGING_COLOR_VALUE(LEVEL))),    \
         (LOGGING_GET_LOG_TIME((log_record_t *)memory)), \
         (LOGGING_GET_LOG_DATETIME((log_record_t *)memory)), \
         (LOGGING_GET_LOG_FUNCTION((log_record_t *)memory)), \
@@ -507,7 +510,7 @@ typedef struct log_record
 # endif
 
 /******************************************************************************/
-// Basic Interfaces
+// Functional Interfaces
 /******************************************************************************/
 #include <stdarg.h>
 static inline void LOG_LEVEL(log_record_t *logger, const char *fmt, ...)
@@ -521,13 +524,48 @@ static inline void LOG_LEVEL(log_record_t *logger, const char *fmt, ...)
     logger->seperator = FORMAT_COLON;
     LOGGING_WRITE_RECORD(logger);
 }
-# define PRE_LOG(LEVEL, fmt, ...) do \
+# define LOGGING_DEFAULT_LOG(LEVEL, fmt, ...) do \
 { \
     log_record_t *logger; \
     LOGGING_MALLOC(logger, LOGGING_LOG_RECORD_SIZE); \
     LOGGING_LOG_RECORD_INIT(logger, LOGGING_LOG_RECORD_SIZE, LEVEL); \
     LOG_LEVEL(logger, fmt "\n", ##__VA_ARGS__); \
 } while (0)
+
+/******************************************************************************/
+// Dynamic Logging Level
+/******************************************************************************/
+# ifdef LOGGING_CONF_DYNAMIC_LOG_LEVEL
+#  ifdef LOGGING_LOG_MODULE
+#   define DEFINED_LOGGING_LOG_MODULE() 1
+#  else
+#   define DEFINED_LOGGING_LOG_MODULE() 0
+#  endif
+#  define PRE_LOG(LEVEL, fmt, ...) do \
+{ \
+    char *log_level_str = NULL; \
+    int log_level; \
+    if (DEFINED_LOGGING_LOG_MODULE()) { \
+        log_level_str = getenv(LOGGING_LOG_MODULE "_LOGGING_LOG_LEVEL"); \
+        if (log_level_str != NULL) { \
+            log_level = atoi(log_level_str); \
+            if (log_level < LOGGING_LEVEL_VALUE(LEVEL)) break; \
+        } \
+    } \
+    log_level_str = getenv("LOGGING_LOG_LEVEL"); \
+    if (log_level_str != NULL) { \
+        log_level = atoi(log_level_str); \
+        if (log_level < LOGGING_LEVEL_VALUE(LEVEL)) break; \
+    } \
+    LOGGING_DEFAULT_LOG(LEVEL, fmt, ##__VA_ARGS__); \
+} while (0)
+# else
+#  define PRE_LOG LOGGING_DEFAULT_LOG
+# endif
+
+/******************************************************************************/
+// Basic Interfaces
+/******************************************************************************/
 # if LOGGING_LOG_LEVEL >= LOGGING_DEBUG_LEVEL
 #  undef DEBUG /* TODO: such undef may cause problem */
 #  define LOG_DEBUG(fmt, ...) PRE_LOG(DEBUG, fmt, ##__VA_ARGS__)
