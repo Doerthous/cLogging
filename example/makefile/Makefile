@@ -35,7 +35,7 @@ else
     endif
 endif
 
-all: basic extend format threading logfile color
+all: basic extend format threading logfile color logfile2
 
 basic: $(SRC_DIR)/basic.c
 	gcc -std=c99 -I$(INC) $^ -o $@
@@ -51,12 +51,14 @@ threading: $(SRC_DIR)/threading.cpp
 
 logfile: $(SRC_DIR)/logfile.cpp
 	g++ -std=gnu++11 -I$(INC) $^ $(LIB) -o $@
+logfile2: $(SRC_DIR)/logfile2.cpp
+	g++ -std=gnu++11 -I$(INC) $^ $(LIB) -o $@
 
 color: $(SRC_DIR)/color.cpp
 	g++ -std=gnu++11 -I$(INC) $^ $(LIB) -o $@
 
 clean:
-	-rm basic extend format threading logfile color *.exe *.txt
+	-rm basic extend format threading logfile color logfile2 *.exe *.txt
 
 .PHONY: FORCE
 FORCE:
