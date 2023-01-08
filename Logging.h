@@ -87,6 +87,8 @@ typedef struct log_record
     struct tm *datetime;
     const char *module;
     const char *seperator;
+    int64_t pid;
+    int tid;
     int message_size;
     int message_len;
     char message;
@@ -109,6 +111,7 @@ typedef struct log_record
 /******************************************************************************/
 // Logging Format
 /******************************************************************************/
+/// Level Flag
 # ifndef LOGGING_LOG_LEVELFLAG
 #  undef LOGGING_DEBUG_FLAG
 #  undef LOGGING_INFO_FLAG
@@ -146,6 +149,7 @@ typedef struct log_record
 #  define LOGGING_LEVEL_VAL(log_record) , (log_record)->level_flag
 # endif
 
+/// Module
 # ifndef LOGGING_LOG_MODULE
 #  define LOGGING_MODULE_FMT
 #  define LOGGING_MODULE_VAL(log_record)
@@ -159,6 +163,7 @@ typedef struct log_record
     } while (0)
 # endif
 
+/// File & Line
 # ifndef LOGGING_LOG_FILELINE
 #  define LOGGING_FILELINE_FMT
 #  define LOGGING_FILELINE_VAL(log_record)
@@ -175,6 +180,7 @@ typedef struct log_record
     )
 # endif
 
+/// Time
 # ifndef LOGGING_LOG_TIME
 #  define LOGGING_GET_LOG_TIME(log_record)
 #  define LOGGING_TIME_FMT
@@ -205,6 +211,7 @@ typedef struct log_record
 #  endif
 # endif
 
+/// Datetime
 # ifndef LOGGING_LOG_DATETIME
 #  define LOGGING_GET_LOG_DATETIME(log_record)
 #  define LOGGING_DATETIME_FMT
@@ -227,6 +234,7 @@ typedef struct log_record
     , (log_record)->datetime->tm_sec
 # endif
 
+/// Function
 # ifndef LOGGING_LOG_FUNCTION
 #  define LOGGING_FUNCTION_FMT "%s"
 #  define LOGGING_FUNCTION_VAL(log_record)
@@ -238,6 +246,38 @@ typedef struct log_record
     ( \
         (log_record)->function = __FUNCTION__, log_record \
     )
+# endif
+
+/// Process ID
+# ifndef LOGGING_LOG_PROCID
+#  define LOGGING_PROCID_FMT
+#  define LOGGING_PROCID_VAL(r)
+#  define LOGGING_GET_LOG_PROCID(r)
+# else
+#  define LOGGING_PROCID_FMT "pid(%d)"
+#  define LOGGING_PROCID_VAL(r) , (r)->pid
+#  if defined(__linux) || defined(__CYGWIN__)
+#   include <sys/types.h>
+#   include <unistd.h>
+#   define LOGGING_GET_LOG_PROCID(r) do \
+     { (r)->pid = (int64_t)getpid(); } while (0)
+#  elif defined(_WIN32) || defined(_WIN64)
+#   include <windows.h>
+#   define LOGGING_GET_LOG_PROCID(r) do \
+     { (r)->pid = (int64_t)GetCurrentProcessId(); } while (0)
+#  endif
+# endif
+
+/// Thread ID
+# ifndef LOGGING_LOG_THRDID
+#  define LOGGING_THRDID_FMT
+#  define LOGGING_THRDID_VAL(r)
+#  define LOGGING_GET_LOG_THRDID(r)
+# else
+   // "Not support thread id now"
+#  define LOGGING_THRDID_FMT
+#  define LOGGING_THRDID_VAL(r)
+#  define LOGGING_GET_LOG_THRDID(r)
 # endif
 
 /******************************************************************************/
@@ -312,9 +352,13 @@ typedef struct log_record
 #  define LOGGING_LOG_ROLLBACK(log_file)
 # endif
 
+/******************************************************************************/
+// Logging Format Builder
+/******************************************************************************/
 # if defined(LOGGING_LOG_LEVELFLAG) || defined(LOGGING_LOG_FILELINE) \
     || defined(LOGGING_LOG_TIME) || defined(LOGGING_LOG_DATETIME) \
-    || defined(LOGGING_LOG_MODULE) || defined(LOGGING_LOG_FUNCTION)
+    || defined(LOGGING_LOG_MODULE) || defined(LOGGING_LOG_FUNCTION) \
+    || defined(LOGGING_LOG_PROCID) || defined(LOGGING_LOG_THRDID)
 #  define FORMAT_SPACE " "
 #  define FORMAT_COLON ":" FORMAT_SPACE
 #  define LOGGING_LOG_SEPERATOR_FMT "%s"
@@ -338,6 +382,16 @@ typedef struct log_record
             format += would_written;
         #endif
 
+        #ifdef LOGGING_LOG_DATETIME
+            would_written = snprintf(format, format_size,
+                " " LOGGING_DATETIME_FMT + !format_len
+                LOGGING_DATETIME_VAL(log_record));
+            // assert(would_written < format_size)
+            format_len += would_written;
+            format_size -= would_written;
+            format += would_written;
+        #endif
+
         #ifdef LOGGING_LOG_TIME
             would_written = snprintf(format, format_size,
                 " " LOGGING_TIME_FMT + !format_len
@@ -348,10 +402,20 @@ typedef struct log_record
             format += would_written;
         #endif
 
-        #ifdef LOGGING_LOG_DATETIME
+        #ifdef LOGGING_LOG_PROCID
             would_written = snprintf(format, format_size,
-                " " LOGGING_DATETIME_FMT + !format_len
-                LOGGING_DATETIME_VAL(log_record));
+                " " LOGGING_PROCID_FMT + !format_len
+                LOGGING_PROCID_VAL(log_record));
+            // assert(would_written < format_size)
+            format_len += would_written;
+            format_size -= would_written;
+            format += would_written;
+        #endif
+
+        #if defined(LOGGING_LOG_THRDID) && 0
+            would_written = snprintf(format, format_size,
+                " " LOGGING_THRDID_FMT + !format_len
+                LOGGING_THRDID_VAL(log_record));
             // assert(would_written < format_size)
             format_len += would_written;
             format_size -= would_written;
@@ -523,13 +587,8 @@ static inline void LOG_LEVEL(log_record_t *logger, const char *fmt, ...)
 
     LOGGING_WRITE_RECORD(logger);
 }
-# define LOGGING_DEFAULT_LOG(LEVEL, fmt, ...) do \
+# define LOGGING_GET_LOG_INFO(r) do \
 { \
-    log_record_t *r; \
-    LOGGING_MALLOC(r, LOGGING_LOG_RECORD_SIZE); \
-    memset(r, 0, LOGGING_LOG_RECORD_SIZE); \
-    r->message_size = LOGGING_LOG_RECORD_SIZE - sizeof(log_record_t); \
-    r->level = LEVEL; \
     LOGGING_GET_LOG_DIRECTION(r); \
     LOGGING_GET_LOG_LEVELFLAG(r); \
     LOGGING_GET_LOG_FILELINE(r); \
@@ -537,6 +596,17 @@ static inline void LOG_LEVEL(log_record_t *logger, const char *fmt, ...)
     LOGGING_GET_LOG_TIME(r); \
     LOGGING_GET_LOG_DATETIME(r); \
     LOGGING_GET_LOG_FUNCTION(r); \
+    LOGGING_GET_LOG_PROCID(r); \
+    LOGGING_GET_LOG_THRDID(r); \
+} while (0)
+# define LOGGING_DEFAULT_LOG(LEVEL, fmt, ...) do \
+{ \
+    log_record_t *r; \
+    LOGGING_MALLOC(r, LOGGING_LOG_RECORD_SIZE); \
+    memset(r, 0, LOGGING_LOG_RECORD_SIZE); \
+    r->message_size = LOGGING_LOG_RECORD_SIZE - sizeof(log_record_t); \
+    r->level = LEVEL; \
+    LOGGING_GET_LOG_INFO(r); \
     LOG_LEVEL(r, fmt "\n", ##__VA_ARGS__); \
 } while (0)
 
@@ -606,14 +676,7 @@ static inline void LOG_LEVEL(log_record_t *logger, const char *fmt, ...)
         memset(logger, 0, LOGGING_LOG_RECORD_SIZE); \
         logger->message_size = LOGGING_LOG_RECORD_SIZE - sizeof(log_record_t); \
         logger->level = LOGGING_DEBUG_LEVEL; \
-        logger->d.dir = LOGGING_DIRECTION; \
-        logger->d.write = LOGGING_DIR_WRITE; \
-        LOGGING_GET_LOG_LEVELFLAG(logger); \
-        LOGGING_GET_LOG_FILELINE(logger); \
-        LOGGING_GET_LOG_MODULE(logger); \
-        LOGGING_GET_LOG_TIME(logger); \
-        LOGGING_GET_LOG_DATETIME(logger); \
-        LOGGING_GET_LOG_FUNCTION(logger); \
+        LOGGING_GET_LOG_INFO(logger); \
         logger->seperator = FORMAT_SPACE; \
         LOGGING_BUILD_FORMAT(logger); \
         /* TODO: if message_len > message_size, then error */ \
