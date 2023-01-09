@@ -14,7 +14,7 @@ FILE *log_file;
 #define LOGGING_LOG_MAX_SIZE 102400000
 //#define LOGGING_LOG_DIRECTION log_file
 #include "Logging.h"
-log_record_t logging_log_record_list;
+log_record_t *logging_log_record_list;
 
 int main()
 {
@@ -38,7 +38,7 @@ int main()
     });
     std::thread t1 = std::thread([&running](){
         while (running) {
-            LOGGING_THREAD_LOOP(&logging_log_record_list);
+            LOGGING_THREAD_LOOP(logging_log_record_list);
         }
     });
 
