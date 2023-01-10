@@ -172,3 +172,28 @@ The following formats are supported for logging. Each element can be controlled 
   ```
 
   "abc" will not output.
+
+- LOGGING_CONF_DYNAMIC_LOG_FORMAT
+
+  This macro enable dynamic logging format control. It use two environment variable(module_LOGGING_LOG_FORMAT & LOGGING_LOG_FORMAT) to control logging format. There are 8 elements support currently (If enable by LOGGING_LOG_XXX):
+
+  1. Level Flag (LVFG)
+  2. Datetime (DTTM)
+  3. Time (TIME)
+  4. Process ID (PCID)
+  5. Thread ID (TRID)
+  6. Module (MODU)
+  7. File & Line (FLLN)
+  8. Function (FUNC)
+
+  Suppose you want to format log record as style below:
+
+  ```sh
+  [167336785.891470] [2023-01-11 00:24:11] [ERROR] test ../format.c(21) main: debug
+  ```
+
+  you can setup the LOGGING_LOG_FORMAT environment as follow:
+
+  ```sh
+  export LOGGING_LOG_FORMAT="TIME DTTM LVFG MODU FLLN FUNC"
+  ```

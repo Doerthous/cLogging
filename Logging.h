@@ -392,93 +392,151 @@ typedef struct log_record
        format_size = log_record->message_size;
        would_written = format_len = 0;
 
-       #ifdef LOGGING_LOG_LEVELFLAG
+       const char *fnames[] = { "",
+           "LVFG", "DTTM", "TIME", "PCID",
+           "TRID", "MODU", "FLLN", "FUNC",
+       };
+       const char *fname = "LVFG DTTM TIME PCID TRID MODU FLLN FUNC";
+       int fi;
+
+       enum {
+           LOGGING_FMT_LEVELFLAG = 1,
+           LOGGING_FMT_DATETIME,
+           LOGGING_FMT_TIME,
+           LOGGING_FMT_PROCID,
+           LOGGING_FMT_THRDID,
+           LOGGING_FMT_MODULE,
+           LOGGING_FMT_FILELINE,
+           LOGGING_FMT_FUNCTION,
+       };
+
+       #ifdef LOGGING_CONF_DYNAMIC_LOG_FORMAT
+       fnames[0] = getenv("LOGGING_LOG_FORMAT");
+       fname = fnames[0] == NULL ? fname : fnames[0];
+       # ifdef LOGGING_LOG_MODULE
+       fnames[0] = getenv(LOGGING_LOG_MODULE "_LOGGING_LOG_FORMAT");
+       fname = fnames[0] == NULL ? fname : fnames[0];
+       # endif
+       #endif
+
+       while (fname) {
+           for (fi = LOGGING_FMT_LEVELFLAG; fi <= LOGGING_FMT_FUNCTION; ++fi) {
+               if (*(uint32_t *)fnames[fi] == *(uint32_t *)fname) {
+                   break;
+               }
+           }
+           fname = strpbrk(fname, " ");
+           fname = fname != NULL ? fname+1 : fname;
+
+           switch (fi) {
+               #ifdef LOGGING_LOG_LEVELFLAG
+               case LOGGING_FMT_LEVELFLAG: {
+                   would_written = snprintf(format, format_size,
+                       " " LOGGING_LEVEL_FMT + !format_len
+                       LOGGING_LEVEL_VAL(log_record));
+                   // assert(would_written < format_size)
+                   format_len += would_written;
+                   format_size -= would_written;
+                   format += would_written;
+               } break;
+               #endif
+
+               #ifdef LOGGING_LOG_DATETIME
+               case LOGGING_FMT_DATETIME: {
+                   would_written = snprintf(format, format_size,
+                       " " LOGGING_DATETIME_FMT + !format_len
+                       LOGGING_DATETIME_VAL(log_record));
+                   // assert(would_written < format_size)
+                   format_len += would_written;
+                   format_size -= would_written;
+                   format += would_written;
+               } break;
+               #endif
+
+               #ifdef LOGGING_LOG_TIME
+               case LOGGING_FMT_TIME: {
+                   would_written = snprintf(format, format_size,
+                       " " LOGGING_TIME_FMT + !format_len
+                       LOGGING_TIME_VAL(log_record));
+                   // assert(would_written < format_size)
+                   format_len += would_written;
+                   format_size -= would_written;
+                   format += would_written;
+               } break;
+               #endif
+
+               #ifdef LOGGING_LOG_PROCID
+               case LOGGING_FMT_PROCID: {
+                   would_written = snprintf(format, format_size,
+                       " " LOGGING_PROCID_FMT + !format_len
+                       LOGGING_PROCID_VAL(log_record));
+                   // assert(would_written < format_size)
+                   format_len += would_written;
+                   format_size -= would_written;
+                   format += would_written;
+               } break;
+               #endif
+
+               #if defined(LOGGING_LOG_THRDID) && 0
+               case LOGGING_FMT_THRDID: {
+                   would_written = snprintf(format, format_size,
+                       " " LOGGING_THRDID_FMT + !format_len
+                       LOGGING_THRDID_VAL(log_record));
+                   // assert(would_written < format_size)
+                   format_len += would_written;
+                   format_size -= would_written;
+                   format += would_written;
+               } break;
+               #endif
+
+               #ifdef LOGGING_LOG_MODULE
+               case LOGGING_FMT_MODULE: {
+                   would_written = snprintf(format, format_size,
+                       " " LOGGING_MODULE_FMT + !format_len
+                       LOGGING_MODULE_VAL(log_record));
+                   // assert(would_written < format_size)
+                   format_len += would_written;
+                   format_size -= would_written;
+                   format += would_written;
+               } break;
+               #endif
+
+               #ifdef LOGGING_LOG_FILELINE
+               case LOGGING_FMT_FILELINE: {
+                   would_written = snprintf(format, format_size,
+                       " " LOGGING_FILELINE_FMT + !format_len
+                       LOGGING_FILELINE_VAL(log_record));
+                   // assert(would_written < format_size)
+                   format_len += would_written;
+                   format_size -= would_written;
+                   format += would_written;
+               } break;
+               #endif
+
+               #ifdef LOGGING_LOG_FUNCTION
+               case LOGGING_FMT_FUNCTION: {
+                   would_written = snprintf(format, format_size,
+                       " " LOGGING_FUNCTION_FMT + !format_len
+                       LOGGING_FUNCTION_VAL(log_record));
+                   // assert(would_written < format_size)
+                   format_len += would_written;
+                   format_size -= would_written;
+                   format += would_written;
+               } break;
+               #endif
+               default: break;
+           }
+       }
+
+       if (format_len > 0) {
            would_written = snprintf(format, format_size,
-               " " LOGGING_LEVEL_FMT + !format_len
-               LOGGING_LEVEL_VAL(log_record));
+               LOGGING_LOG_SEPERATOR_FMT
+               LOGGING_LOG_SEPERATOR_VAL(log_record));
            // assert(would_written < format_size)
            format_len += would_written;
            format_size -= would_written;
            format += would_written;
-       #endif
-
-       #ifdef LOGGING_LOG_DATETIME
-           would_written = snprintf(format, format_size,
-               " " LOGGING_DATETIME_FMT + !format_len
-               LOGGING_DATETIME_VAL(log_record));
-           // assert(would_written < format_size)
-           format_len += would_written;
-           format_size -= would_written;
-           format += would_written;
-       #endif
-
-       #ifdef LOGGING_LOG_TIME
-           would_written = snprintf(format, format_size,
-               " " LOGGING_TIME_FMT + !format_len
-               LOGGING_TIME_VAL(log_record));
-           // assert(would_written < format_size)
-           format_len += would_written;
-           format_size -= would_written;
-           format += would_written;
-       #endif
-
-       #ifdef LOGGING_LOG_PROCID
-           would_written = snprintf(format, format_size,
-               " " LOGGING_PROCID_FMT + !format_len
-               LOGGING_PROCID_VAL(log_record));
-           // assert(would_written < format_size)
-           format_len += would_written;
-           format_size -= would_written;
-           format += would_written;
-       #endif
-
-       #if defined(LOGGING_LOG_THRDID) && 0
-           would_written = snprintf(format, format_size,
-               " " LOGGING_THRDID_FMT + !format_len
-               LOGGING_THRDID_VAL(log_record));
-           // assert(would_written < format_size)
-           format_len += would_written;
-           format_size -= would_written;
-           format += would_written;
-       #endif
-
-       #ifdef LOGGING_LOG_MODULE
-           would_written = snprintf(format, format_size,
-               " " LOGGING_MODULE_FMT + !format_len
-               LOGGING_MODULE_VAL(log_record));
-           // assert(would_written < format_size)
-           format_len += would_written;
-           format_size -= would_written;
-           format += would_written;
-       #endif
-
-       #ifdef LOGGING_LOG_FILELINE
-           would_written = snprintf(format, format_size,
-               " " LOGGING_FILELINE_FMT + !format_len
-               LOGGING_FILELINE_VAL(log_record));
-           // assert(would_written < format_size)
-           format_len += would_written;
-           format_size -= would_written;
-           format += would_written;
-       #endif
-
-       #ifdef LOGGING_LOG_FUNCTION
-           would_written = snprintf(format, format_size,
-               " " LOGGING_FUNCTION_FMT + !format_len
-               LOGGING_FUNCTION_VAL(log_record));
-           // assert(would_written < format_size)
-           format_len += would_written;
-           format_size -= would_written;
-           format += would_written;
-       #endif
-
-       would_written = snprintf(format, format_size,
-           LOGGING_LOG_SEPERATOR_FMT
-           LOGGING_LOG_SEPERATOR_VAL(log_record));
-       // assert(would_written < format_size)
-       format_len += would_written;
-       format_size -= would_written;
-       format += would_written;
+       }
 
        log_record->message_len = format_len;
    }
@@ -638,6 +696,11 @@ static inline void LOGGING_LOG_RECORD_FMT(log_record_t *r, const char *fmt, ...)
 
     LOGGING_WRITE_RECORD(r);
 }
+
+/******************************************************************************/
+// Dynamic Logging Format
+/******************************************************************************/
+/* #define LOGGING_CONF_DYNAMIC_LOG_FORMAT to enable this feature */
 
 /******************************************************************************/
 // Dynamic Logging Level

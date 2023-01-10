@@ -13,6 +13,7 @@
 #define LOGGING_ERROR_FLAG "[ERROR]"
 
 #define LOGGING_CONF_DYNAMIC_LOG_LEVEL
+#define LOGGING_CONF_DYNAMIC_LOG_FORMAT
 #include "Logging.h"
 
 int main()
