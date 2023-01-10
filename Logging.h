@@ -80,9 +80,15 @@ typedef struct log_direction
 /******************************************************************************/
 typedef struct log_record
 {
+    #ifdef LOGGING_LOG_THREAD
     struct log_record *next;
+    struct log_record *prev;
+    #endif
+
     struct log_direction d;
     int level;
+    const char *seperator;
+
     #ifdef LOGGING_LOG_LEVELFLAG
     const char *level_flag;
     #endif
@@ -107,7 +113,7 @@ typedef struct log_record
     #ifdef LOGGING_LOG_THRDID
     int tid;
     #endif
-    const char *seperator;
+
     int message_size;
     int message_len;
     char message;
@@ -511,31 +517,43 @@ typedef struct log_record
 #  ifndef LOGGING_LOG_LOCKING
 #   error You need to enable LOGGING_LOG_LOCKING
 #  endif
-#  define LOGGING_WRITE_RECORD(logger) do \
+#  define LOGGING_WRITE_RECORD(r) do \
    { \
        LOGGING_LOCK(); \
-       logger->next = LOGGING_LOG_RECORD_LIST; \
-       LOGGING_LOG_RECORD_LIST = logger; \
+       if (LOGGING_LOG_RECORD_LIST == NULL) { \
+           (r)->next = (r); \
+           (r)->prev = (r); \
+       } \
+       else { \
+           (r)->next = LOGGING_LOG_RECORD_LIST; \
+           LOGGING_LOG_RECORD_LIST->prev->next = (r); \
+           (r)->prev = LOGGING_LOG_RECORD_LIST->prev; \
+           LOGGING_LOG_RECORD_LIST->prev = (r); \
+       } \
+       LOGGING_LOG_RECORD_LIST = (r); \
        LOGGING_UNLOCK(); \
    } while (0)
 #  define LOGGING_MALLOC(ptr, size) ptr = (log_record_t*)malloc(size);
 #  define LOGGING_FREE(ptr) free(ptr)
-#  define LOGGING_THREAD_LOOP(log_record_list) do \
+#  define LOGGING_THREAD_LOOP(record_list) do \
    { \
+       log_record *tail_record; \
        LOGGING_LOCK(); \
-       log_record_t **log_record = &(log_record_list); \
-       LOGGING_UNLOCK(); \
-       while (*log_record) { \
-           while ((*log_record)) { \
-               if (!(*log_record)->next) { \
-                   LOGGING_LOG_RECORD_WRITE(*log_record); \
-                   LOGGING_FREE(*log_record); \
-                   *log_record = NULL; \
-                   break; \
-               } \
-               log_record = &((*log_record)->next); \
-           } \
+       if ((record_list) == NULL) { \
+           LOGGING_UNLOCK(); \
+           break; \
        } \
+       tail_record = (record_list)->prev; \
+       tail_record->prev->next = (record_list); \
+       (record_list)->prev = tail_record->prev; \
+       tail_record->next = NULL; \
+       tail_record->prev = NULL; \
+       if ((record_list)->next == NULL && (record_list)->prev == NULL) { \
+           (record_list) = NULL; \
+       } \
+       LOGGING_UNLOCK(); \
+       LOGGING_LOG_RECORD_WRITE(tail_record); \
+       LOGGING_FREE(tail_record); \
    } while (0)
 # else
 #  define LOGGING_WRITE_RECORD(log_record) do \
