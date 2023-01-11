@@ -5,8 +5,13 @@
 - Cross Platform
 - Logging Level
 - Logging Direction (Console or File)
-- Logging Format (Timestamp, Datetime, Module, File & Line, Funtion name)
+- Logging Format (Level Flag, Timestamp, Datetime, Module, Process ID, File & Line, Funtion name)
 - Logging Color
+- Multi-Threading
+- Multi-Direction (Log to multiple files or console)
+- Multi-Processing (On Linux with open option O_APPEND)
+- Dynamic Level Control
+- Dynamic Log Format Control
 
 ### Usage
 
@@ -52,15 +57,19 @@ int main()
 }
 ```
 
-### Log Format
+#### Multi-Processing
 
-The following formats are supported for logging. Each element can be controlled through macros, and the order of elements cannot be changed.
+see `example/logfile2.cpp`.
+
+### Format
+
+The following formats are supported for logging. Each element can be controlled through macros, and the order of elements can be changed if `LOGGING_CONF_DYNAMIC_LOG_FORMAT` is enable.
 
 ```txt
-[level] [time] [datetime] [module] [file line] [function]: message
+[level] [datetime] [time] [process id] [module] [file line] [function]: message
 ```
 
-### Log Configuration
+### Configuration
 
 - LOGGING_LOG_RECORD_SIZE
 
@@ -154,7 +163,7 @@ The following formats are supported for logging. Each element can be controlled 
 - LOGGING_LOG_THREAD
 - LOGGING_CONF_DYNAMIC_LOG_LEVEL
 
-  This macro enable dynamic logging level config. It use two environment variable(module_LOGGING_LOG_LEVEL & LOGGING_LOG_LEVEL) to control logging switch. For example:
+  This macro enable dynamic logging level control. It use two environment variable(module_LOGGING_LOG_LEVEL & LOGGING_LOG_LEVEL) to control logging switch. For example:
 
   ```C
   #define LOGGING_LOG_MODULE "moduleA"
@@ -175,13 +184,13 @@ The following formats are supported for logging. Each element can be controlled 
 
 - LOGGING_CONF_DYNAMIC_LOG_FORMAT
 
-  This macro enable dynamic logging format control. It use two environment variable(module_LOGGING_LOG_FORMAT & LOGGING_LOG_FORMAT) to control logging format. There are 8 elements support currently (If enable by LOGGING_LOG_XXX):
+  This macro enable dynamic logging format control. It use two environment variable(module_LOGGING_LOG_FORMAT & LOGGING_LOG_FORMAT) to control logging format. There are 7 elements support currently (If enable by LOGGING_LOG_XXX):
 
   1. Level Flag (LVFG)
   2. Datetime (DTTM)
   3. Time (TIME)
   4. Process ID (PCID)
-  5. Thread ID (TRID)
+  5. Thread ID (TRID) // Not support now
   6. Module (MODU)
   7. File & Line (FLLN)
   8. Function (FUNC)
