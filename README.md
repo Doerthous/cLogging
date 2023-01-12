@@ -71,6 +71,32 @@ The following formats are supported for logging. Each element can be controlled 
 
 ### Configuration
 
+- LOGGING_LOG_LEVEL
+
+  There are four logging levels:
+
+  - LOGGING_DEBUG_LEVEL (4)
+  - LOGGING_INFO_LEVEL (3)
+  - LOGGING_WARN_LEVEL (2)
+  - LOGGING_ERROR_LEVEL (1)
+
+  `LOGGING_LOG_LEVEL` macro control the availability of logging interfaces. The default value is `LOGGING_DEBUG_LEVEL`.
+
+  e.g:
+
+  ```C
+  #include "Logging.h"
+  LOG_DEBUG("foo"); // foo
+  LOG_INFO("bar"); // bar
+  ```
+
+  ```C
+  #define LOGGING_LOG_LEVEL LOGGING_INFO_LEVEL
+  #include "Logging.h"
+  LOG_DEBUG("foo"); // This macro will evaluate to an empty line, so "foo" will no output
+  LOG_INFO("bar"); // bar
+  ```
+
 - LOGGING_LOG_RECORD_SIZE
 
   This macro control the max size of a single log record. default value is 1024.
@@ -82,6 +108,8 @@ The following formats are supported for logging. Each element can be controlled 
   ```C
   #define LOGGING_LOG_LEVELFLAG
   #include "logging.h"
+  LOG_DEBUG("xxx"); // [D]: xxx
+  LOG_INFO("xxx"); // [I]: xxx
   ```
 
   You can change the logging level flag by define the following macros:
@@ -93,6 +121,8 @@ The following formats are supported for logging. Each element can be controlled 
   #define LOGGING_ERROR_FLAG "[ERROR]"
   #define LOGGING_LOG_LEVELFLAG
   #include "logging.h"
+  LOG_DEBUG("xxx"); // [DEBUG]: xxx
+  LOG_INFO("xxx"); // [INFO]: xxx
   ```
 
 - LOGGING_LOG_DIRECTION
@@ -112,6 +142,7 @@ The following formats are supported for logging. Each element can be controlled 
   ```C
   #define LOGGING_LOG_MODULE "ModuleA"
   #include "logging.h"
+  LOG_DEBUG("xxx"); // ModuleA: xxx
   ```
 
 - LOGGING_LOG_FILELINE
@@ -121,6 +152,7 @@ The following formats are supported for logging. Each element can be controlled 
   ```C
   #define LOGGING_LOG_FILELINE
   #include "logging.h"
+  LOG_DEBUG("xxx"); // foo.c(9): xxx
   ```
 
 - LOGGING_LOG_TIME
@@ -130,6 +162,7 @@ The following formats are supported for logging. Each element can be controlled 
   ```C
   #define LOGGING_LOG_TIME
   #include "logging.h"
+  LOG_DEBUG("xxx"); // [167336785.891470]: xxx
   ```
 
 - LOGGING_LOG_DATETIME
@@ -139,6 +172,7 @@ The following formats are supported for logging. Each element can be controlled 
   ```C
   #define LOGGING_LOG_DATETIME
   #include "logging.h"
+  LOG_DEBUG("xxx"); // [2023-01-11 00:24:11]: xxx
   ```
 
 - LOGGING_LOG_FUNCTION
@@ -148,6 +182,7 @@ The following formats are supported for logging. Each element can be controlled 
   ```C
   #define LOGGING_LOG_FUNCTION
   #include "logging.h"
+  LOG_DEBUG("xxx"); // main: xxx
   ```
 
 - LOGGING_LOG_COLOR
