@@ -35,30 +35,39 @@ else
     endif
 endif
 
-all: basic extend format threading logfile color logfile2
+TARGETS += basic
+TARGETS += basic_e
+TARGETS += extend
+TARGETS += extend_e
+TARGETS += format
+TARGETS += format_e
+TARGETS += threading
+TARGETS += threading_e
+TARGETS += logfile
+TARGETS += logfile_e
+TARGETS += color
+TARGETS += color_e
+TARGETS += multidir
+TARGETS += multidir_e
 
-basic: $(SRC_DIR)/basic.c
-	gcc -std=c99 -I$(INC) $^ -o $@
+all: $(TARGETS)
 
-extend: $(SRC_DIR)/extend.c
-	gcc -std=c99 -I$(INC) $^ -o $@
+logging.eo: $(SRC_DIR)/logging.c
+	gcc -g -std=c99 -I$(INC) -c $^ -o $@
+%.eo: $(SRC_DIR)/%.c
+	gcc -g -DLOGGING_AS_HEADER -std=c99 -I$(INC) -c $^ -o $@
+%.eo: $(SRC_DIR)/%.cpp
+	g++ -g -DLOGGING_AS_HEADER -std=gnu++11 -I$(INC) $(LIB) -c $^ -o $@
 
-format: $(SRC_DIR)/format.c
-	gcc -std=c99 -I$(INC) $^ -o $@
-
-threading: $(SRC_DIR)/threading.cpp
-	g++ -std=gnu++11 -I$(INC) $^ $(LIB) -o $@
-
-logfile: $(SRC_DIR)/logfile.cpp
-	g++ -std=gnu++11 -I$(INC) $^ $(LIB) -o $@
-logfile2: $(SRC_DIR)/logfile2.cpp
-	g++ -std=gnu++11 -I$(INC) $^ $(LIB) -o $@
-
-color: $(SRC_DIR)/color.cpp
-	g++ -std=gnu++11 -I$(INC) $^ $(LIB) -o $@
+%_e: logging.eo %.eo
+	g++ $(LIB) $^ -o $@
+%: $(SRC_DIR)/%.c ../../Logging.h
+	gcc -std=c99 -I$(INC) $< -o $@
+%: $(SRC_DIR)/%.cpp ../../Logging.h
+	g++ -std=gnu++11 -I$(INC) $< $(LIB) -o $@
 
 clean:
-	-rm basic extend format threading logfile color logfile2 *.exe *.txt
+	-rm $(TARGETS) *.eo *.exe *.txt
 
 .PHONY: FORCE
 FORCE:
