@@ -62,11 +62,11 @@ extern "C" {
 #  define LOGGING_FUNC_DCL(SIGNATURE) \
     static inline SIGNATURE;
 # endif
-# if defined(LOGGING_AS_HEADER) || defined(LOGGING_AS_SOURCE)
-#  define LOGGING_EVIL_MODE
-# endif
 
-/// Debug Utils
+/// Utils
+# define LOGGING__STR(x) #x
+# define LOGGING_STR(x) LOGGING__STR(x)
+
  //# define LOGGING_CONF_DEBUG
 # ifdef LOGGING_CONF_DEBUG
 #  define LOGGING_PRINTF(...) do \
@@ -81,6 +81,34 @@ extern "C" {
 #  define LOGGING_PRINTF(...)
 #  define LOGGING_DEBUG_BLOCK(...)
 #  define LOGGING_EVIL_DEBUG_BLOCK(...)
+# endif
+
+/******************************************************************************/
+// Logging Configuration
+/******************************************************************************/
+# if defined(LOGGING_AS_HEADER) || defined(LOGGING_AS_SOURCE)
+#  define LOGGING_EVIL_MODE
+# endif
+# if (defined(LOGGING_LOG_DIRECTION) && (LOGGING_LOG_MAX_SIZE > 0))
+#  define LOGGING_FEAT_FILE_TRUNCATE
+# endif
+# if defined(LOGGING_LOG_LEVELFLAG) || defined(LOGGING_LOG_FILELINE) \
+    || defined(LOGGING_LOG_TIME) || defined(LOGGING_LOG_DATETIME) \
+    || defined(LOGGING_LOG_MODULE) || defined(LOGGING_LOG_FUNCTION) \
+    || defined(LOGGING_LOG_PROCID) || defined(LOGGING_LOG_THRDID) \
+    || defined(LOGGING_EVIL_MODE)
+#  define LOGGING_FEAT_WITH_FORMAT
+# endif
+
+/******************************************************************************/
+// Logging Level
+/******************************************************************************/
+# define LOGGING_DEBUG_LEVEL 4
+# define LOGGING_INFO_LEVEL 3
+# define LOGGING_WARN_LEVEL 2
+# define LOGGING_ERROR_LEVEL 1
+# ifndef LOGGING_LOG_LEVEL
+#  define LOGGING_LOG_LEVEL LOGGING_DEBUG_LEVEL
 # endif
 
 /******************************************************************************/
@@ -118,14 +146,18 @@ typedef struct log_direction
 #  define LOGGING_GET_LOG_DIRECTION(r) LOGGING_GET_LOG_DIRECTION_EX(r, \
            LOGGING_DIRECTION, LOGGING_DIR_WRITE, LOGGING_LOG_DIRECTION_LIST)
 # endif
+# define LOGGING_INIT_DIRECTION(r, l) do \
+  { \
+      LOGGING_GET_LOG_DIRECTION(r); \
+  } while (0)
 
 /******************************************************************************/
 // Logging Record
 /******************************************************************************/
-struct log_format;
+struct log_record_format;
 typedef struct log_record
 {
-    #if defined(LOGGING_LOG_THREAD)
+    #if defined(LOGGING_LOG_THREAD) || defined(LOGGING_EVIL_MODE)
     struct log_record *next;
     struct log_record *prev;
     #endif
@@ -134,7 +166,7 @@ typedef struct log_record
     int level;
     const char *seperator;
 
-    struct log_format *fmt;
+    struct log_record_format *fmt;
 
     size_t mem_size;
     int message_size;
@@ -146,23 +178,42 @@ typedef struct log_record
 # endif
 
 /******************************************************************************/
-// Logging Level
+// Logging Logger
 /******************************************************************************/
-# define LOGGING_DEBUG_LEVEL 4
-# define LOGGING_INFO_LEVEL 3
-# define LOGGING_WARN_LEVEL 2
-# define LOGGING_ERROR_LEVEL 1
-# ifndef LOGGING_LOG_LEVEL
-#  define LOGGING_LOG_LEVEL LOGGING_DEBUG_LEVEL
+struct log_logger;
+typedef int (*log_format_init_t)(struct log_record *, struct log_logger *);
+struct log_logger_format
+{
+    const char *name;
+    log_format_init_t init;
+};
+# ifndef LOGGING_LOG_LOGGER_FORMAT_COUNT
+#  define LOGGING_LOG_LOGGER_FORMAT_COUNT 32
 # endif
+typedef struct log_logger
+{
+    const char *name; // LOGGING_LOG_MODULE
+    int level;
+    const char *levelflag;
+    const char *fileline;
+    const char *function;
+    size_t format_count;
+    const char *format_conf;
+    struct log_logger_format formats[LOGGING_LOG_LOGGER_FORMAT_COUNT];
+} log_logger_t;
 
 /******************************************************************************/
 // Logging Format
 /******************************************************************************/
 /// Definition
 //// Struct
-typedef int (*log_formatter_t)(void *val, char *msg, int msg_len, int first);
-typedef struct log_format
+typedef int (*log_format_format_t)(void *val, char *msg, int mlen, int first);
+typedef struct log_format_data
+{
+    void *data;
+    log_format_format_t format;
+} log_format_data_t;
+typedef struct log_record_format
 {
 #if !defined(LOGGING_EVIL_MODE)
 
@@ -193,93 +244,102 @@ typedef struct log_format
     int count;
 
 # else
-    struct log_format *next;
+    struct log_record_format *next;
     const char *name;
-    log_formatter_t format;
+    log_format_format_t format;
     /* variable info data */
 # endif
 } log_format_t;
 //// EVIL_FILED
-LOGGING_FUNC_DCL(void *LOGGING_LOG_RECORD_MALLOC(log_record_t *r, size_t size));
+LOGGING_FUNC_DCL(void *LOGGING_RECORD_MALLOC(log_record_t *r, size_t size));
 # ifdef LOGGING_EVIL_MODE
-   log_format_t *LOGGING_LOG_RECORD_FORMAT_ALLOC(log_record_t *r, size_t s,
-       const char *n, log_formatter_t f);
+   log_format_t *LOGGING_RECORD_ADD_FORMAT(log_record_t *r, size_t s,
+       const char *n, log_format_format_t f);
 #  define LOGGING_FMT_FIELD_ADD(r, t, n, f) \
-   ((t *)(LOGGING_LOG_RECORD_FORMAT_ALLOC(r, sizeof(t), n, f)+1))
+   ((t *)(LOGGING_RECORD_ADD_FORMAT(r, sizeof(t), n, f)+1))
 #  define LOGGING_FMT_FILED_VAL(f, t) (*(t *)(((log_format_t *)(f))+1))
 # endif
 //// Format Template
-///// LOGGING_FMT_FMT_FILED
-# define LOGGING_FMT_FMT_TEMPLATE_DECLARE(NAME) \
-  LOGGING_FUNC_DCL(int NAME(void *, char *, int, int))
-# define LOGGING_FMT_FMT_TEMPLATE(NAME, FMT, VAL) \
+///// LOGGING_FORMAT_FORMAT
+# define LOGGING_FORMAT_FORMAT(FIELD, TYPE, FMT, ...) \
   LOGGING_FUNC_DEF( \
-  int NAME(void *r, char *msg, int msg_len, int first), \
+  int LOGGING_FORMAT_FORMAT_##FIELD(void *r, char *m, int mlen, int f), \
   { \
+      TYPE v = LOGGING_FORMAT_GET_##FIELD(r); \
       LOGGING_PRINTF("r: %p, fmt: %s\n", r, FMT); \
-      int would_written = snprintf(msg, msg_len, " " FMT + !!(first), VAL(r)); \
+      int would_written = snprintf(m, mlen, " " FMT + !!(f), ##__VA_ARGS__); \
       LOGGING_PRINTF("ww: %d\n", would_written); \
-      if (would_written > msg_len) { \
+      if (would_written > mlen) { \
           return 0; \
       } \
       return would_written; \
   } \
   )
-///// LOGGING_FMT_SET_FILED
+///// LOGGING_FORMAT_SET
 # ifdef LOGGING_EVIL_MODE
-#  define LOGGING_FMT_SET_TEMPLATE(FIELD, SFIELD, TYPE, NAME, FMTER) \
+#  define LOGGING_FORMAT_SET(FIELD, SFIELD, TYPE, NAME) \
    LOGGING_FUNC_DEF( \
-   void LOGGING_FMT_SET_##FIELD(log_record_t *r, TYPE v), \
+   void LOGGING_FORMAT_SET_##FIELD(log_record_t *r, TYPE v), \
    { \
        TYPE *m; \
-       m = LOGGING_FMT_FIELD_ADD(r, TYPE, NAME, FMTER); \
+       m = LOGGING_FMT_FIELD_ADD(r, TYPE, NAME, \
+                                 LOGGING_FORMAT_FORMAT_##FIELD); \
        if (m != NULL) *m = v; \
    } \
    )
 # else
-#  define LOGGING_FMT_SET_TEMPLATE(FIELD, SFIELD, TYPE, NAME, FMTER) \
+#  define LOGGING_FORMAT_SET(FIELD, SFIELD, TYPE, NAME) \
    LOGGING_FUNC_DEF( \
-   void LOGGING_FMT_SET_##FIELD(log_record_t *r, TYPE v), \
+   void LOGGING_FORMAT_SET_##FIELD(log_record_t *r, TYPE v), \
    { \
-       log_formatter_t *fmter; \
+       log_format_format_t *fmter; \
        r->fmt->SFIELD = v; \
-       fmter = (log_formatter_t *)LOGGING_LOG_RECORD_MALLOC(r, \
-                                     sizeof(log_formatter_t)); \
+       fmter = (log_format_format_t *)LOGGING_RECORD_MALLOC(r, \
+                                     sizeof(log_format_format_t)); \
        if (fmter != NULL) { \
-           *fmter = FMTER; \
+           *fmter = LOGGING_FORMAT_FORMAT_##FIELD; \
            (r)->fmt->count += 1; \
        } \
    } \
    )
 # endif
 
-///// LOGGING_FMT_GET_FILED
+///// LOGGING_FORMAT_GET
 # ifdef LOGGING_EVIL_MODE
-#  define LOGGING_FMT_GET_TEMPLATE(FIELD, SFIELD, TYPE) \
+#  define LOGGING_FORMAR_GET(FIELD, SFIELD, TYPE) \
    LOGGING_FUNC_DEF( \
-   TYPE LOGGING_FMT_GET_##FIELD(void *f), \
+   TYPE LOGGING_FORMAT_GET_##FIELD(void *f), \
    { \
        return LOGGING_FMT_FILED_VAL((log_format_t *)f, TYPE); \
    } \
    )
 # else
-#  define LOGGING_FMT_GET_TEMPLATE(FIELD, SFIELD, TYPE) \
+#  define LOGGING_FORMAR_GET(FIELD, SFIELD, TYPE) \
    LOGGING_FUNC_DEF( \
-   TYPE LOGGING_FMT_GET_##FIELD(void *f), \
+   TYPE LOGGING_FORMAT_GET_##FIELD(void *f), \
    { \
        return ((log_format_t *)f)->SFIELD; \
    } \
    )
 # endif
 
-///// LOGGING_FMT_FIELD_DEF
-# define LOGGING_FMT_FIELD_DEF(FIELD, SFIELD, TYPE, NAME) \
-  LOGGING_FMT_FMT_TEMPLATE_DECLARE(LOGGING_FMT_FMT_##FIELD) \
-  LOGGING_FMT_SET_TEMPLATE(FIELD, SFIELD, TYPE, NAME, \
-      LOGGING_FMT_FMT_##FIELD) \
-  LOGGING_FMT_GET_TEMPLATE(FIELD, SFIELD, TYPE) \
-  LOGGING_FMT_FMT_TEMPLATE(LOGGING_FMT_FMT_##FIELD, \
-      LOGGING_##FIELD##_FMT, LOGGING_##FIELD##_VAL)
+
+///// LOGGING_FORMAT_INIT
+# define LOGGING_FORMAT_INIT(FIELD, COLLECT) \
+  LOGGING_FUNC_DEF( \
+  int LOGGING_FORMAT_INIT_##FIELD(log_record_t *r, log_logger_t *l), \
+  { \
+      LOGGING_FORMAT_SET_##FIELD(r, COLLECT); \
+      return 1; /* TODO */ \
+  } \
+  )
+
+///// LOGGING_FMT_DEF
+# define LOGGING_FMT_DEF(FIELD, SFIELD, NAME, TYPE, COLLECT, FMT, ...) \
+  LOGGING_FORMAR_GET(FIELD, SFIELD, TYPE) \
+  LOGGING_FORMAT_FORMAT(FIELD, TYPE, FMT, ##__VA_ARGS__) \
+  LOGGING_FORMAT_SET(FIELD, SFIELD, TYPE, NAME) \
+  LOGGING_FORMAT_INIT(FIELD, COLLECT)
 
 /// Level Flag
 # if defined(LOGGING_LOG_LEVELFLAG) || defined(LOGGING_AS_SOURCE)
@@ -295,126 +355,107 @@ LOGGING_FUNC_DCL(void *LOGGING_LOG_RECORD_MALLOC(log_record_t *r, size_t size));
 #  ifndef LOGGING_ERROR_FLAG
 #   define LOGGING_ERROR_FLAG "[E]"
 #  endif
-#  define LOGGING_LEVELFLAG_FMT "%s"
-#  define LOGGING_LEVELFLAG_VAL LOGGING_FMT_GET_LEVELFLAG
-   LOGGING_FMT_FIELD_DEF(LEVELFLAG, levelflag, const char *, "LVFG")
-   #define LOGGING_GET_LOG_LEVELFLAG(r) do \
-   { \
-       const char *lvl_flag[] = { \
-           "", LOGGING_DEBUG_FLAG, LOGGING_INFO_FLAG, \
-           LOGGING_WARN_FLAG, LOGGING_ERROR_FLAG, \
-       }; \
-       LOGGING_FMT_SET_LEVELFLAG(r, lvl_flag[r->level]); \
-   } while (0)
+#  define LOGGING_LEVELFLAG_VAL(r) r
+   LOGGING_FMT_DEF(LEVELFLAG, levelflag, "LVFG", const char *, l->levelflag,
+                   "%s", v)
+#  define LOGGING_LEVELFLAG_BUILTIN(l) \
+   LOGGING_LOGGER_ADD_FORMAT(l, "LVFG", LOGGING_FORMAT_INIT_LEVELFLAG)
 # else
 #  define LOGGING_DEBUG_FLAG
 #  define LOGGING_INFO_FLAG
 #  define LOGGING_WARN_FLAG
 #  define LOGGING_ERROR_FLAG
-#  define LOGGING_GET_LOG_LEVELFLAG(r) (r)
+#  define LOGGING_LEVELFLAG_BUILTIN(l)
 # endif
 
 /// Module
 # if defined(LOGGING_LOG_MODULE) || defined(LOGGING_AS_SOURCE)
-#  define LOGGING_MODULE_FMT "%s"
-#  define LOGGING_MODULE_VAL LOGGING_FMT_GET_MODULE
-   LOGGING_FMT_FIELD_DEF(MODULE, module, const char *, "MODU")
-#  define LOGGING_GET_LOG_MODULE(r) do \
-   { \
-       LOGGING_FMT_SET_MODULE(r, LOGGING_LOG_MODULE); \
-   } while (0)
+#  define LOGGING_MODULE_VAL(r) r
+   LOGGING_FMT_DEF(MODULE, module, "MODU", const char *, l->name, "%s", v)
+#  define LOGGING_MODULE_BUILTIN(l) \
+   LOGGING_LOGGER_ADD_FORMAT(l, "MODU", LOGGING_FORMAT_INIT_MODULE)
 # else
-#  define LOGGING_GET_LOG_MODULE(r) (r)
+#  define LOGGING_MODULE_BUILTIN(l)
 # endif
 
 /// File & Line
 # if defined(LOGGING_LOG_FILELINE) || defined(LOGGING_AS_SOURCE)
 #  define __STR(x) #x
 #  define STR(x) __STR(x)
-#  define LOGGING_FILELINE_FMT "%s"
-#  define LOGGING_FILELINE_VAL LOGGING_FMT_GET_FILELINE
-   LOGGING_FMT_FIELD_DEF(FILELINE, fileline, const char *, "FLLN")
-#  define LOGGING_GET_LOG_FILELINE(r) do \
-   { \
-       /* Here we have to use macro function to get the __LINE__ */ \
-       LOGGING_FMT_SET_FILELINE(r, __FILE__ "(" STR(__LINE__) ")"); \
-   } while (0)
+#  define LOGGING_FILELINE_VAL(r) r
+   LOGGING_FMT_DEF(FILELINE, fileline, "FLLN", const char *, l->fileline,
+                   "%s", v)
+#  define LOGGING_FILELINE_BUILTIN(l) \
+   LOGGING_LOGGER_ADD_FORMAT(l, "FLLN", LOGGING_FORMAT_INIT_FILELINE)
 # else
-#  define LOGGING_GET_LOG_FILELINE(r) (r)
+#  define LOGGING_FILELINE_BUILTIN(l)
 # endif
 
 /// Time
 # if defined(LOGGING_LOG_TIME) || defined(LOGGING_AS_SOURCE)
-#  define LOGGING_TIME_FMT "[%.6lf]"
-#  define LOGGING_TIME_VAL(f) LOGGING_FMT_GET_TIME(f)/1e6
-   LOGGING_FMT_FIELD_DEF(TIME, time, int64_t, "TIME")
 #  if defined(__linux) || defined(__CYGWIN__)
 #   include <sys/time.h>
     LOGGING_FUNC_DEF(
-    void *LOGGING_GET_LOG_TIME(log_record_t *r),
+    int64_t LOGGING_TIME(),
     {
         struct timeval tv;
         gettimeofday(&tv, NULL);
-        LOGGING_FMT_SET_TIME(r, (int64_t)tv.tv_sec * 100000 + tv.tv_usec);
-        return r;
+        return (int64_t)tv.tv_sec * 100000 + tv.tv_usec;
     }
     )
 #  elif defined(_WIN32) || defined(_WIN64)
 #   include <windows.h>
     LOGGING_FUNC_DEF(
-    void *LOGGING_GET_LOG_TIME(log_record_t *r),
+    int64_t LOGGING_TIME(),
     {
         FILETIME ft; LARGE_INTEGER li;
         GetSystemTimeAsFileTime(&ft);
         li.LowPart = ft.dwLowDateTime;
         li.HighPart = ft.dwHighDateTime;
-        LOGGING_FMT_SET_TIME(r, (li.QuadPart - 116444736000000000UL)/10);
-        return r;
+        return (li.QuadPart - 116444736000000000UL)/10;
     }
     )
 #  endif
+   LOGGING_FMT_DEF(TIME, time, "TIME", int64_t, LOGGING_TIME(),
+                   "[%.6lf]", v/1e6)
+#  define LOGGING_TIME_BUILTIN(l) \
+   LOGGING_LOGGER_ADD_FORMAT(l, "TIME", LOGGING_FORMAT_INIT_TIME)
 # else
-#  define LOGGING_GET_LOG_TIME(r) (r)
+#  define LOGGING_TIME_BUILTIN(l)
 # endif
 
 /// Datetime
 # if defined(LOGGING_LOG_DATETIME) || defined(LOGGING_AS_SOURCE)
 #  include <time.h>
-#  define LOGGING_DATETIME_FMT "[%04d-%02d-%02d %02d:%02d:%02d]"
-#  define LOGGING_DATETIME_VAL(f) LOGGING_FMT_GET_DATETIME(f)->tm_year+1900 \
-   , LOGGING_FMT_GET_DATETIME(f)->tm_mon+1 \
-   , LOGGING_FMT_GET_DATETIME(f)->tm_mday \
-   , LOGGING_FMT_GET_DATETIME(f)->tm_hour \
-   , LOGGING_FMT_GET_DATETIME(f)->tm_min \
-   , LOGGING_FMT_GET_DATETIME(f)->tm_sec
-   LOGGING_FMT_FIELD_DEF(DATETIME, datetime, struct tm *, "DTTM")
    LOGGING_FUNC_DEF(
-   void *LOGGING_GET_LOG_DATETIME(log_record_t *r),
+   struct tm *LOGGING_DATETIME(),
    {
        time_t tm; time(&tm);
-       LOGGING_FMT_SET_DATETIME(r, localtime(&tm));
-       return r;
+       return localtime(&tm);
    }
    )
+   LOGGING_FMT_DEF(DATETIME, datetime, "DTTM", struct tm *, LOGGING_DATETIME(),
+                   "[%04d-%02d-%02d %02d:%02d:%02d]",
+                   v->tm_year+1900, v->tm_mon+1, v->tm_mday,
+                   v->tm_hour, v->tm_min, v->tm_sec)
+#  define LOGGING_DATETIME_BUILTIN(l) \
+   LOGGING_LOGGER_ADD_FORMAT(l, "DTTM", LOGGING_FORMAT_INIT_DATETIME)
 # else
-#  define LOGGING_GET_LOG_DATETIME(r) (r)
+#  define LOGGING_DATETIME_BUILTIN(l)
 # endif
 
 /// Function
 # if defined(LOGGING_LOG_FUNCTION) || defined(LOGGING_AS_SOURCE)
-#  define LOGGING_FUNCTION_FMT "%s"
-#  define LOGGING_FUNCTION_VAL LOGGING_FMT_GET_FUNCTION
-   LOGGING_FMT_FIELD_DEF(FUNCTION, function, const char *, "FUNC")
-#  define LOGGING_GET_LOG_FUNCTION(r) LOGGING_FMT_SET_FUNCTION(r, __FUNCTION__)
+   LOGGING_FMT_DEF(FUNCTION, function, "FUNC", const char *, l->function,
+                   "%s", v)
+#  define LOGGING_FUNCTION_BUILTIN(l) \
+   LOGGING_LOGGER_ADD_FORMAT(l, "FUNC", LOGGING_FORMAT_INIT_FUNCTION)
 # else
-#  define LOGGING_GET_LOG_FUNCTION(r) (r)
+#  define LOGGING_FUNCTION_BUILTIN(l)
 # endif
 
 /// Process ID
 # if defined(LOGGING_LOG_PROCID) || defined(LOGGING_AS_SOURCE)
-#  define LOGGING_PROCID_FMT "pid(%d)"
-#  define LOGGING_PROCID_VAL LOGGING_FMT_GET_PROCID
-   LOGGING_FMT_FIELD_DEF(PROCID, pid, int64_t, "PCID")
 #  if defined(__linux) || defined(__CYGWIN__)
 #   include <sys/types.h>
 #   include <unistd.h>
@@ -423,19 +464,20 @@ LOGGING_FUNC_DCL(void *LOGGING_LOG_RECORD_MALLOC(log_record_t *r, size_t size));
 #   include <windows.h>
 #   define LOGGING_GETPID() (int64_t)GetCurrentProcessId()
 #  endif
-#  define LOGGING_GET_LOG_PROCID(r) LOGGING_FMT_SET_PROCID(r, LOGGING_GETPID())
+#  define LOGGING_PROCID_VAL(d) d
+   LOGGING_FMT_DEF(PROCID, pid, "PCID", int64_t, LOGGING_GETPID(), "pid(%d)")
+#  define LOGGING_PROCID_BUILTIN(l) \
+   LOGGING_LOGGER_ADD_FORMAT(l, "PCID", LOGGING_FORMAT_INIT_PROCID)
 # else
-#  define LOGGING_GET_LOG_PROCID(r) (r)
+#  define LOGGING_PROCID_BUILTIN(l)
 # endif
 
 /// Thread ID
 # ifndef LOGGING_LOG_THRDID
 #  define LOGGING_THRDID_FMT
-#  define LOGGING_GET_LOG_THRDID(r) (r)
 # else
    // "Not support thread id now"
 #  define LOGGING_THRDID_FMT
-#  define LOGGING_GET_LOG_THRDID(r) (r)
 # endif
 
 /******************************************************************************/
@@ -481,7 +523,7 @@ LOGGING_FUNC_DCL(void *LOGGING_LOG_RECORD_MALLOC(log_record_t *r, size_t size));
 /******************************************************************************/
 // Logging File Truncate Support
 /******************************************************************************/
-# if defined(LOGGING_LOG_DIRECTION) && (LOGGING_LOG_MAX_SIZE > 0)
+# if defined(LOGGING_FEAT_FILE_TRUNCATE)
 #  if defined(__linux) || defined(__CYGWIN__)
 #   include <unistd.h>
 #   define LOGGING_FILE_TRUNCATE(file, size) ftruncate(fileno(file), size)
@@ -490,24 +532,22 @@ LOGGING_FUNC_DCL(void *LOGGING_LOG_RECORD_MALLOC(log_record_t *r, size_t size));
 #   define LOGGING_FILE_TRUNCATE(file, size) _chsize(_fileno(file), size)
 #  endif
 #  ifndef LOGGING_LOG_ROLLBACK
-    LOGGING_FUNC_DEF(
-    void LOGGING_LOG_ROLLBACK(void *_log_file),
-    {
-        FILE *log_file = (FILE *)_log_file;
-        if (log_file != stdout) {
-            long org = ftell(log_file);
-            fseek(log_file, 0L, SEEK_END);
-            long pos = ftell(log_file);
-            if (pos > LOGGING_LOG_MAX_SIZE) {
-                LOGGING_FILE_TRUNCATE(log_file, 0);
-                fseek(log_file, 0L, SEEK_SET);
-            }
-            else {
-                fseek(log_file, org, SEEK_SET);
-            }
-        }
-    }
-    )
+    #define LOGGING_LOG_ROLLBACK(_log_file) do \
+    { \
+        FILE *log_file = (FILE *)_log_file; \
+        if (log_file != stdout) { \
+            long org = ftell(log_file); \
+            fseek(log_file, 0L, SEEK_END); \
+            long pos = ftell(log_file); \
+            if (pos > LOGGING_LOG_MAX_SIZE) { \
+                LOGGING_FILE_TRUNCATE(log_file, 0); \
+                fseek(log_file, 0L, SEEK_SET); \
+            } \
+            else { \
+                fseek(log_file, org, SEEK_SET); \
+            } \
+        } \
+    } while (0)
 #  endif
 # else
 #  define LOGGING_LOG_ROLLBACK(log_file)
@@ -517,79 +557,64 @@ LOGGING_FUNC_DCL(void *LOGGING_LOG_RECORD_MALLOC(log_record_t *r, size_t size));
 // Dynamic Logging Format
 /******************************************************************************/
 /// Format Config String
-# ifdef LOGGING_LOG_MODULE
-#  define LOGGING_GET_MODULE_FORMAT_CONF_STR(pstr) do \
-   { \
-       *(pstr) = getenv(LOGGING_LOG_MODULE "_LOGGING_LOG_FORMAT"); \
-       LOGGING_PRINTF("%s module format conf str: %p\n", \
-                      LOGGING_LOG_MODULE, *(pstr)); \
-   } while (0)
-
+# ifndef LOGGING_CONF_DYNAMIC_LOG_FORMAT
+#  define LOGGING_GET_FORMAT_CONF_STR(x)
 # else
-#  define LOGGING_GET_MODULE_FORMAT_CONF_STR(pstr)
+#  ifdef LOGGING_LOG_MODULE
+#   define LOGGING_GET_MODULE_FORMAT_CONF_STR(pstr) do \
+    { \
+        *(pstr) = getenv(LOGGING_LOG_MODULE "_LOGGING_LOG_FORMAT"); \
+        LOGGING_PRINTF("%s module format conf str: %p\n", \
+                       LOGGING_LOG_MODULE, *(pstr)); \
+    } while (0)
+
+#  else
+#   define LOGGING_GET_MODULE_FORMAT_CONF_STR(pstr)
+#  endif
+#  define LOGGING_GET_FORMAT_CONF_STR(pstr) do \
+   { \
+       LOGGING_GET_MODULE_FORMAT_CONF_STR(pstr); \
+       if (*(pstr) != NULL) break; \
+       *(pstr) = getenv("LOGGING_LOG_FORMAT"); \
+       LOGGING_PRINTF("format conf str: %p\n", *(pstr)); \
+   } while (0)
 # endif
-# define LOGGING_GET_FORMAT_CONF_STR(pstr) do \
-  { \
-      LOGGING_GET_MODULE_FORMAT_CONF_STR(pstr); \
-      if (*(pstr) != NULL) break; \
-      *(pstr) = getenv("LOGGING_LOG_FORMAT"); \
-      LOGGING_PRINTF("format conf str: %p\n", *(pstr)); \
-  } while (0)
 
 /// Static Format Config
-# define LOGGING_INIT_FORMAT_STATIC(RECORD) do \
-  { \
-      LOGGING_GET_LOG_LEVELFLAG(RECORD); \
-      LOGGING_GET_LOG_DATETIME(RECORD); \
-      LOGGING_GET_LOG_TIME(RECORD); \
-      LOGGING_GET_LOG_PROCID(RECORD); \
-      LOGGING_GET_LOG_THRDID(RECORD); \
-      LOGGING_GET_LOG_FILELINE(RECORD); \
-      LOGGING_GET_LOG_MODULE(RECORD); \
-      LOGGING_GET_LOG_FUNCTION(RECORD); \
-  } while (0);
-
+LOGGING_FUNC_DEF(
+void LOGGING_INIT_FORMAT_STATIC(struct log_record *r, struct log_logger *l),
+{
+    LOGGING_PRINTF("logger format count: %d\n", l->format_count);
+    for (int i = 0; i < l->format_count; ++i) {
+        LOGGING_PRINTF("%s format init\n", l->formats[i].name);
+        l->formats[i].init(r, l);
+    }
+}
+)
 /// Dynamic Format Config
-# define LOGGING_INIT_FORMAT_DYNAMIC(RECORD) do \
-  { \
-      const char *fname = NULL; \
-      LOGGING_GET_FORMAT_CONF_STR(&fname); \
-      if (fname == NULL) { \
-          LOGGING_INIT_FORMAT_STATIC(RECORD); \
-          break; \
-      } \
-      LOGGING_PRINTF("FORMAT_CONF_STR: %s\n", fname); \
-      while (fname && strlen(fname) >= 4) { \
-          do { \
-              if (*(int32_t *)fname == *(uint32_t *)"LVFG") { \
-                  LOGGING_GET_LOG_LEVELFLAG(RECORD); break; \
-              } \
-              if (*(int32_t *)fname == *(uint32_t *)"DTTM") { \
-                  LOGGING_GET_LOG_DATETIME(RECORD); break; \
-              } \
-              if (*(int32_t *)fname == *(uint32_t *)"TIME") { \
-                  LOGGING_GET_LOG_TIME(RECORD); break; \
-              } \
-              if (*(int32_t *)fname == *(uint32_t *)"PCID") { \
-                  LOGGING_GET_LOG_PROCID(RECORD); break; \
-              } \
-              if (*(int32_t *)fname == *(uint32_t *)"TRID") { \
-                  LOGGING_GET_LOG_THRDID(RECORD); break; \
-              } \
-              if (*(int32_t *)fname == *(uint32_t *)"MODU") { \
-                  LOGGING_GET_LOG_MODULE(RECORD); break; \
-              } \
-              if (*(int32_t *)fname == *(uint32_t *)"FLLN") { \
-                  LOGGING_GET_LOG_FILELINE(RECORD); break; \
-              } \
-              if (*(int32_t *)fname == *(uint32_t *)"FUNC") { \
-                  LOGGING_GET_LOG_FUNCTION(RECORD); break; \
-              } \
-          } while (0); \
-          fname = strpbrk(fname, " "); \
-          fname = fname != NULL ? fname+1 : fname; \
-      } \
-  } while (0)
+LOGGING_FUNC_DCL(log_format_init_t
+    LOGGING_LOGGER_GET_FORMAT(struct log_logger *l, const char *name))
+LOGGING_FUNC_DEF(
+void LOGGING_INIT_FORMAT_DYNAMIC(struct log_record *r, struct log_logger *l),
+{
+    const char *fname = l->format_conf;
+    if (fname == NULL) {
+        LOGGING_INIT_FORMAT_STATIC(r, l);
+        return;
+    }
+    LOGGING_PRINTF("FORMAT_CONF_STR: %s\n", fname);
+
+    log_format_init_t init;
+    while (fname && strlen(fname) >= 4) {
+        init = LOGGING_LOGGER_GET_FORMAT(l, fname);
+        if (init) {
+            init(r, l);
+        }
+        fname = strpbrk(fname, " ");
+        fname = fname != NULL ? fname+1 : fname;
+    }
+}
+)
 
 /// Interface
 # ifdef LOGGING_CONF_DYNAMIC_LOG_FORMAT
@@ -599,46 +624,128 @@ LOGGING_FUNC_DCL(void *LOGGING_LOG_RECORD_MALLOC(log_record_t *r, size_t size));
 # endif
 
 /******************************************************************************/
+// Logging Logger Functions
+/******************************************************************************/
+/// logger_get_caller_context
+# ifdef LOGGING_LOG_LEVELFLAG
+#  define LOGGING_LOGGER_GET_LEVELFLAG(l) do \
+   { \
+     const char *lvl_flag[] = { \
+         "", LOGGING_DEBUG_FLAG, LOGGING_INFO_FLAG, \
+         LOGGING_WARN_FLAG, LOGGING_ERROR_FLAG, \
+     }; \
+     (l)->levelflag = lvl_flag[(l)->level]; \
+   } while (0)
+# else
+#  define LOGGING_LOGGER_GET_LEVELFLAG(l) (l)->levelflag = NULL;
+# endif
+# ifdef LOGGING_LOG_MODULE
+#  define LOGGING_LOGGER_GET_MODULE(l) (l)->name = LOGGING_LOG_MODULE;
+# else
+#  define LOGGING_LOGGER_GET_MODULE(l) (l)->name = NULL;
+# endif
+# define LOGGING_LOGGER_GET_CALLER_CONTEXT(l) do \
+  { \
+    LOGGING_LOGGER_GET_MODULE(l); \
+    LOGGING_LOGGER_GET_LEVELFLAG(l); \
+    (l)->fileline = __FILE__ "(" LOGGING_STR(__LINE__) ")"; \
+    (l)->function = __FUNCTION__; \
+  } while (0)
+/// logger_add_format
+LOGGING_FUNC_DEF(
+int LOGGING_LOGGER_ADD_FORMAT(struct log_logger *l,
+                               const char *name, log_format_init_t init),
+{
+    if (l->format_count < LOGGING_LOG_LOGGER_FORMAT_COUNT) {
+        l->formats[l->format_count].name = name;
+        l->formats[l->format_count].init = init;
+        l->format_count += 1;
+        LOGGING_PRINTF("logger add format: %s, %p\n", name, init);
+        return !0;
+    }
+    return 0;
+}
+)
+/// logger_get_format
+LOGGING_FUNC_DEF(
+log_format_init_t LOGGING_LOGGER_GET_FORMAT(struct log_logger *l,
+                                            const char *name),
+{
+    for (int i = 0; i < l->format_count; ++i) {
+        if (*(uint32_t *)name == *(uint32_t *)(l->formats[i].name)) {
+            LOGGING_PRINTF("%s init found\n", l->formats[i].name);
+            return l->formats[i].init;
+        }
+    }
+    return NULL;
+}
+)
+/// logger_add_builtin_format
+/*
+  This should be a macro function so that we can add builtin according to user
+  configuration.
+*/
+# define LOGGING_LOGGER_ADD_BUILTIN_FORMAT(l) do \
+{ \
+    LOGGING_LEVELFLAG_BUILTIN(l); \
+    LOGGING_DATETIME_BUILTIN(l); \
+    LOGGING_TIME_BUILTIN(l); \
+    LOGGING_PROCID_BUILTIN(l); \
+    LOGGING_MODULE_BUILTIN(l); \
+    LOGGING_FILELINE_BUILTIN(l); \
+    LOGGING_FUNCTION_BUILTIN(l); \
+} while (0)
+
+/// logger_add_custom_format
+# ifndef LOGGING_LOGGER_ADD_CUSTOM_FORMAT
+#  define LOGGING_LOGGER_ADD_CUSTOM_FORMAT(l)
+# endif
+/// init_logger
+# define LOGGING_INIT_LOGGER(l, LEVEL) do \
+  { \
+      memset(l, 0, sizeof(struct log_logger)); \
+      (l)->level = LEVEL; \
+      LOGGING_LOGGER_GET_CALLER_CONTEXT(l); \
+      LOGGING_LOGGER_ADD_BUILTIN_FORMAT(l); \
+      LOGGING_LOGGER_ADD_CUSTOM_FORMAT(l); \
+      LOGGING_GET_FORMAT_CONF_STR(&l->format_conf); \
+  } while (0)
+
+/******************************************************************************/
 // Logging Format Builder
 /******************************************************************************/
-# if defined(LOGGING_LOG_LEVELFLAG) || defined(LOGGING_LOG_FILELINE) \
-    || defined(LOGGING_LOG_TIME) || defined(LOGGING_LOG_DATETIME) \
-    || defined(LOGGING_LOG_MODULE) || defined(LOGGING_LOG_FUNCTION) \
-    || defined(LOGGING_LOG_PROCID) || defined(LOGGING_LOG_THRDID) \
-    || defined(LOGGING_EVIL_MODE)
-/// Get Formatter
+# if defined(LOGGING_FEAT_WITH_FORMAT)
+/// get_format
 #  ifdef LOGGING_EVIL_MODE
     LOGGING_FUNC_DEF(
-    void LOGGING_GET_FORMATTERS(log_record_t *r,
-                                log_formatter_t fis[], void *fds[], int *fil),
+    void LOGGING_GET_FORMAT(log_record_t *r, log_format_data_t fs[], int *fl),
     {
         log_format_t *fmt = (r)->fmt;
         int i = 0;
         while (fmt) {
             LOGGING_PRINTF("format %p ", fmt);
             LOGGING_PRINTF("add %s\n", fmt->name);
-            fis[i] = fmt->format; fds[i] = (void *)fmt; i++;
+            fs[i].format = fmt->format; fs[i].data = (void *)fmt; i++;
             fmt = fmt->next;
         }
-        *(fil) = i;
+        *(fl) = i;
     }
     )
 #  else
     LOGGING_FUNC_DEF(
-    void LOGGING_GET_FORMATTERS(log_record_t *r,
-                                log_formatter_t fis[], void *fds[], int *fil),
+    void LOGGING_GET_FORMAT(log_record_t *r, log_format_data_t fs[], int *fl),
     {
         log_format_t *fmt = r->fmt;
-        log_formatter_t *fmters = (log_formatter_t *)fmt;
+        log_format_format_t *fmters = (log_format_format_t *)fmt;
         for (int i = 0; i < fmt->count; ++i) {
-            fis[i] = fmters[-1-i]; fds[i] = (void *)r->fmt;
-            LOGGING_PRINTF("fmter: %p\n", fis[i]);
+            fs[i].format = fmters[-1-i]; fs[i].data = (void *)r->fmt;
+            LOGGING_PRINTF("format: %p\n", fs[i]);
         }
-        *(fil) = fmt->count;
+        *(fl) = fmt->count;
     }
     )
 #  endif
-/// Build Format
+/// build_format
 #  define FORMAT_SPACE " "
 #  define FORMAT_COLON ":" FORMAT_SPACE
 #  define LOGGING_LOG_SEPERATOR_FMT "%s"
@@ -648,23 +755,25 @@ LOGGING_FUNC_DCL(void *LOGGING_LOG_RECORD_MALLOC(log_record_t *r, size_t size));
    {
        LOGGING_EVIL_DEBUG_BLOCK(
            log_format_t *f = r->fmt;
-           LOGGING_PRINTF("formats: ");
-           while (f) { LOGGING_PRINTF("%s ", f->name); f = f->next; }
-           LOGGING_PRINTF("\n");
+           LOGGING_PRINTF("formats: \n");
+           while (f) {
+               LOGGING_PRINTF("  %p", f);
+               LOGGING_PRINTF("  %s\n", f->name);
+               f = f->next;
+           }
        )
 
-       log_formatter_t fis[10];
-       void *fds [10];
-       int fil = 0;
+       log_format_data_t fs[10];
+       int fl = 0;
        LOGGING_PRINTF("parser format conf\n");
-       LOGGING_GET_FORMATTERS(r, fis, fds, &fil);
-       LOGGING_PRINTF("format count: %d\n", fil);
+       LOGGING_GET_FORMAT(r, fs, &fl);
+       LOGGING_PRINTF("format count: %d\n", fl);
 
        LOGGING_PRINTF("build format\n");
        int would_written;
-       for (int i = 0; i < fil; ++i) {
-           if (fis[i]) {
-               would_written = fis[i](fds[i],
+       for (int i = 0; i < fl; ++i) {
+           if (fs[i].format) {
+               would_written = fs[i].format(fs[i].data,
                    (&(r->message))+(r->message_len),
                    (r->message_size)-(r->message_len),
                    !r->message_len);
@@ -691,6 +800,134 @@ LOGGING_FUNC_DCL(void *LOGGING_LOG_RECORD_MALLOC(log_record_t *r, size_t size));
 #  define LOGGING_LOG_SEPERATOR_VAL(r)
 #  define LOGGING_BUILD_FORMAT(r) LOGGING_PRINTF("not build format\n")
 # endif
+
+/******************************************************************************/
+// Logging Record Functions
+/******************************************************************************/
+/// malloc
+LOGGING_FUNC_DEF(
+void *LOGGING_RECORD_MALLOC(log_record_t *r, size_t size),
+{
+    uint8_t *msg_end = (uint8_t *)(&(r->message)+(r->message_size));
+    LOGGING_PRINTF("msg end: %p\n", msg_end);
+
+    if (r->message_size < size) {
+        return NULL;
+    }
+    r->message_size -= size;
+
+    return msg_end-size;
+}
+)
+/// init
+# ifdef LOGGING_EVIL_MODE
+#  define LOGGING_LOG_RECORD_FMT_INIT(r) ((r)->fmt = NULL, (r))
+# else
+#  define LOGGING_LOG_RECORD_FMT_INIT(r) \
+   ( \
+       (r)->fmt = (log_format_t *) \
+           LOGGING_RECORD_MALLOC(r, sizeof(log_format_t)), (r) \
+   )
+# endif
+# define LOGGING_LOG_RECORD_INIT(RECORD, SIZE, LEVEL, SEP) \
+  ( \
+      memset(RECORD, 0, SIZE), \
+      (RECORD)->mem_size = (SIZE)-sizeof(log_record_t), \
+      (RECORD)->message_size = (SIZE)-sizeof(log_record_t), \
+      (RECORD)->level = (LEVEL), \
+      (RECORD)->seperator = (SEP), \
+      LOGGING_LOG_RECORD_FMT_INIT(RECORD), /* alloc space for formats */ \
+      (RECORD) \
+  )
+
+/// write
+# ifdef LOGGING_LOG_DIRECTION_LIST
+#  define LOGGING_OTHER_DIR_ITER(r, m, l) do \
+   {
+       struct log_direction *dir = (r)->d.next;
+       while (dir) {
+           dir->write(dir->dir, m, l);
+           dir = dir->next;
+       }
+   }
+# else
+#  define LOGGING_OTHER_DIR_ITER(r)
+# endif
+# ifdef LOGGING_LOG_COLOR
+#  define LOGGING_WRITE_WITH_COLOR(r, m, l) do \
+   { \
+       void *color[] = { \
+           LOGGING_CLEAR_COLOR, \
+           LOGGING_ERROR_COLOR, \
+           LOGGING_WARN_COLOR, \
+           LOGGING_INFO_COLOR, \
+           LOGGING_DEBUG_COLOR, \
+       }; \
+       LOGGING_PRINTF("write with color\n"); \
+       LOGGING_COLOR_SET(color[r->level]); \
+       (r)->d.write(r->d.dir, m, l); \
+       LOGGING_COLOR_SET(color[0]); \
+   } while (0)
+# else
+#  define LOGGING_WRITE_WITH_COLOR(r, m, l) (r)->d.write(r->d.dir, m, l)
+# endif
+
+# define LOGGING_RECORD_WRITE(r) do \
+{ \
+    char *msg = &((r)->message); \
+    size_t msg_len = strlen(msg); \
+    LOGGING_PRINTF("logging record write\n"); \
+    LOGGING_WRITE_WITH_COLOR(r, msg, msg_len); \
+    LOGGING_LOG_ROLLBACK((r)->d.dir); \
+    LOGGING_OTHER_DIR_ITER(r) \
+} while (0)
+
+/// record_add_format
+# if defined(LOGGING_EVIL_MODE)
+LOGGING_FUNC_DEF(
+log_format_t *LOGGING_RECORD_ADD_FORMAT(log_record_t *r, size_t s,
+    const char *n, log_format_format_t f),
+{
+    log_format_t *fmt, **tail;
+    LOGGING_PRINTF("alloc %d+%d, name: %s, fmt: %p\n",
+                   sizeof(log_format_t), s, n, f);
+
+    fmt = (log_format_t *)LOGGING_RECORD_MALLOC(r, sizeof(log_format_t)+s);
+    if (fmt != NULL) {
+        fmt->next = NULL;
+        fmt->name = n;
+        fmt->format = f;
+        tail = &(r->fmt);
+        while (*tail) {
+            tail = &((*tail)->next);
+        }
+        *tail = fmt;
+    }
+
+    return fmt;
+}
+)
+# endif
+/// build_format
+LOGGING_FUNC_DEF(
+void LOGGING_BUILD_RECORD(log_record_t *r, const char *fmt, ...),
+{
+    LOGGING_BUILD_FORMAT(r);
+
+    va_list args;
+    va_start(args, fmt);
+    /* TODO: if message_len > message_size, than error */
+    r->message_len = vsnprintf(&(r->message)+(r->message_len),
+        (r->message_size)-(r->message_len), fmt, args);
+    va_end(args);
+}
+)
+
+/// init_record
+# define LOGGING_INIT_RECORD(record, level, seperator) \
+  LOGGING_MALLOC(record, LOGGING_LOG_RECORD_SIZE); \
+  record = LOGGING_LOG_RECORD_INIT(record, LOGGING_LOG_RECORD_SIZE, \
+                                   level, seperator);
 
 /******************************************************************************/
 // Logging Locking
@@ -756,7 +993,7 @@ LOGGING_FUNC_DCL(void *LOGGING_LOG_RECORD_MALLOC(log_record_t *r, size_t size));
            (record_list) = NULL; \
        } \
        LOGGING_UNLOCK(); \
-       LOGGING_LOG_RECORD_WRITE(tail_record); \
+       LOGGING_RECORD_WRITE(tail_record); \
        LOGGING_FREE(tail_record); \
    } while (0)
 # else
@@ -764,139 +1001,13 @@ LOGGING_FUNC_DCL(void *LOGGING_LOG_RECORD_MALLOC(log_record_t *r, size_t size));
 #  define LOGGING_WRITE_RECORD(log_record) do \
    { \
        LOGGING_LOCK(); \
-       LOGGING_LOG_RECORD_WRITE(log_record); \
+       LOGGING_RECORD_WRITE(log_record); \
        LOGGING_UNLOCK(); \
        LOGGING_FREE(log_record); \
    } while (0)
 #  define LOGGING_MALLOC(ptr, size) char mem[size]; ptr = (log_record_t*)mem
 #  define LOGGING_FREE(ptr)
 #  define LOGGING_THREAD_LOOP(dummy)
-# endif
-
-/******************************************************************************/
-// Logging Record Functions
-/******************************************************************************/
-/// malloc
-LOGGING_FUNC_DEF(
-void *LOGGING_LOG_RECORD_MALLOC(log_record_t *r, size_t size),
-{
-    uint8_t *msg_end = (uint8_t *)(&(r->message)+(r->message_size));
-    LOGGING_PRINTF("msg end: %p\n", msg_end);
-
-    if (r->message_size < size) {
-        return NULL;
-    }
-    r->message_size -= size;
-
-    return msg_end-size;
-}
-)
-/// init
-# ifdef LOGGING_EVIL_MODE
-#  define LOGGING_LOG_RECORD_FMT_INIT(r) ((r)->fmt = NULL, (r))
-# else
-#  define LOGGING_LOG_RECORD_FMT_INIT(r) \
-   ( \
-       (r)->fmt = (log_format_t *) \
-           LOGGING_LOG_RECORD_MALLOC(r, sizeof(log_format_t)), (r) \
-   )
-# endif
-# define LOGGING_LOG_RECORD_INIT(RECORD, SIZE, LEVEL, SEP) \
-  ( \
-      memset(RECORD, 0, SIZE), \
-      (RECORD)->mem_size = (SIZE)-sizeof(log_record_t), \
-      (RECORD)->message_size = (SIZE)-sizeof(log_record_t), \
-      (RECORD)->level = (LEVEL), \
-      (RECORD)->seperator = (SEP), \
-      LOGGING_LOG_RECORD_FMT_INIT(RECORD), /* alloc space for formats */ \
-      LOGGING_GET_LOG_DIRECTION(RECORD), \
-      (RECORD) \
-  )
-
-/// write
-# ifdef LOGGING_LOG_DIRECTION_LIST
-#  define LOGGING_OTHER_DIR_ITER(r, m, l) do \
-   {
-       struct log_direction *dir = (r)->d.next;
-       while (dir) {
-           dir->write(dir->dir, m, l);
-           dir = dir->next;
-       }
-   }
-# else
-#  define LOGGING_OTHER_DIR_ITER(r)
-# endif
-# ifdef LOGGING_LOG_COLOR
-#  define LOGGING_WRITE_WITH_COLOR(r, m, l) do \
-   { \
-       void *color[] = { \
-           LOGGING_CLEAR_COLOR, \
-           LOGGING_ERROR_COLOR, \
-           LOGGING_WARN_COLOR, \
-           LOGGING_INFO_COLOR, \
-           LOGGING_DEBUG_COLOR, \
-       }; \
-       LOGGING_COLOR_SET(color[r->level]); \
-       (r)->d.write(r->d.dir, m, l); \
-       LOGGING_COLOR_SET(color[0]); \
-   } while (0)
-# else
-#  define LOGGING_WRITE_WITH_COLOR(r, m, l) (r)->d.write(r->d.dir, m, l)
-# endif
-LOGGING_FUNC_DEF(
-void LOGGING_LOG_RECORD_WRITE(struct log_record *r),
-{
-    char *msg = &(r->message);
-    size_t msg_len = strlen(msg);
-
-    LOGGING_WRITE_WITH_COLOR(r, msg, msg_len);
-    LOGGING_LOG_ROLLBACK(r->d.dir);
-    LOGGING_OTHER_DIR_ITER(r)
-}
-)
-
-/// format
-LOGGING_FUNC_DEF(
-void LOGGING_LOG_RECORD_FMT(log_record_t *r, const char *fmt, ...),
-{
-    LOGGING_BUILD_FORMAT(r);
-
-    va_list args;
-    va_start(args, fmt);
-    /* TODO: if message_len > message_size, than error */
-    r->message_len = vsnprintf(&(r->message)+(r->message_len),
-        (r->message_size)-(r->message_len), fmt, args);
-    va_end(args);
-
-    LOGGING_WRITE_RECORD(r);
-}
-)
-
-/// malloc format
-# if defined(LOGGING_EVIL_MODE)
-LOGGING_FUNC_DEF(
-log_format_t *LOGGING_LOG_RECORD_FORMAT_ALLOC(log_record_t *r, size_t s,
-    const char *n, log_formatter_t f),
-{
-    log_format_t *fmt, **tail;
-    LOGGING_PRINTF("alloc %d+%d, name: %s, fmt: %p\n",
-                   sizeof(log_format_t), s, n, f);
-
-    fmt = (log_format_t *)LOGGING_LOG_RECORD_MALLOC(r, sizeof(log_format_t)+s);
-    if (fmt != NULL) {
-        fmt->next = NULL;
-        fmt->name = n;
-        fmt->format = f;
-        tail = &(r->fmt);
-        while (*tail) {
-            tail = &((*tail)->next);
-        }
-        *tail = fmt;
-    }
-
-    return fmt;
-}
-)
 # endif
 
 /******************************************************************************/
@@ -927,11 +1038,13 @@ log_format_t *LOGGING_LOG_RECORD_FORMAT_ALLOC(log_record_t *r, size_t s,
 { \
     LOGGING_DYNAMIC_LOG_LEVEL_CHECK(level); \
     log_record_t *r; \
-    LOGGING_MALLOC(r, LOGGING_LOG_RECORD_SIZE); \
-    r = LOGGING_LOG_RECORD_INIT(r, LOGGING_LOG_RECORD_SIZE, \
-            level, FORMAT_COLON); \
-    LOGGING_INIT_FORMAT(r); \
-    LOGGING_LOG_RECORD_FMT(r, fmt "\n", ##__VA_ARGS__); \
+    log_logger_t _l, *l = &_l; \
+    LOGGING_INIT_RECORD(r, level, FORMAT_COLON); \
+    LOGGING_INIT_LOGGER(l, level); \
+    LOGGING_INIT_DIRECTION(r, l); \
+    LOGGING_INIT_FORMAT(r, l); \
+    LOGGING_BUILD_RECORD(r, fmt "\n", ##__VA_ARGS__); \
+    LOGGING_WRITE_RECORD(r); \
 } while (0)
 
 /******************************************************************************/
@@ -964,24 +1077,25 @@ log_format_t *LOGGING_LOG_RECORD_FORMAT_ALLOC(log_record_t *r, size_t s,
 # if LOGGING_LOG_LEVEL >= LOGGING_DEBUG_LEVEL
 #  define LOG_BUFFER(msg, buff, cnt) do \
    { \
-       log_record_t *logger; \
-       LOGGING_MALLOC(logger, LOGGING_LOG_RECORD_SIZE); \
-       logger = LOGGING_LOG_RECORD_INIT(logger, LOGGING_LOG_RECORD_SIZE, \
-                    LOGGING_DEBUG_LEVEL, FORMAT_SPACE); \
-       LOGGING_INIT_FORMAT(logger); \
-       LOGGING_BUILD_FORMAT(logger); \
+       log_record_t *r; \
+       struct log_logger _l, *l = &_l; \
+       LOGGING_INIT_RECORD(r, LOGGING_DEBUG_LEVEL, FORMAT_SPACE); \
+       LOGGING_INIT_LOGGER(l, LOGGING_DEBUG_LEVEL); \
+       LOGGING_INIT_FORMAT(r, l); \
+       LOGGING_INIT_DIRECTION(r, l); \
+       LOGGING_BUILD_FORMAT(r); \
        /* TODO: if message_len > message_size, then error */ \
-       logger->message_len += snprintf( \
-           &(logger->message)+logger->message_len,  \
-           logger->message_size-logger->message_len, \
+       r->message_len += snprintf( \
+           &(r->message)+r->message_len,  \
+           r->message_size-r->message_len, \
            "%s", msg); \
        for (int i = 0; i < cnt; ++i) { \
-           logger->message_len += snprintf( \
-               &(logger->message)+logger->message_len,   \
-               logger->message_size-logger->message_len, \
+           r->message_len += snprintf( \
+               &(r->message)+r->message_len,   \
+               r->message_size-r->message_len, \
                " %02X%s"+!i, (uint8_t)(buff[i]), ((i+1)==cnt) ? "\n" : ""); \
        } \
-       LOGGING_WRITE_RECORD(logger); \
+       LOGGING_WRITE_RECORD(r); \
    } while (0)
 
 #  define LOG_IF(expr, fmt, ...) if (expr) LOG_DEBUG(fmt, ##__VA_ARGS__)
@@ -1003,7 +1117,9 @@ log_format_t *LOGGING_LOG_RECORD_FORMAT_ALLOC(log_record_t *r, size_t s,
 #  define LOG_DEBUG_VAR(type, name, init)
 # endif
 
+/******************************************************************************/
 // All Interfaces (invalid mode)
+/******************************************************************************/
 #else // #define LOGGING_H_ to disable all interfaces
 
 # define LOG_DEBUG(fmt, ...)
