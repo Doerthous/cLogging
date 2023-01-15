@@ -46,14 +46,14 @@ extern "C" {
 # include <stdarg.h>
 
 /// Evil Mode
-# if defined(LOGGING_AS_HEADER)
-#  define LOGGING_FUNC_DEF(SIGNATURE, ...) \
-    extern SIGNATURE;
-#  define LOGGING_FUNC_DCL(SIGNATURE) \
-    extern SIGNATURE;
-# elif defined(LOGGING_AS_SOURCE)
+# if defined(LOGGING_AS_SOURCE)
 #  define LOGGING_FUNC_DEF(SIGNATURE, ...) \
     SIGNATURE __VA_ARGS__
+#  define LOGGING_FUNC_DCL(SIGNATURE) \
+    extern SIGNATURE;
+# elif defined(LOGGING_AS_HEADER)
+#  define LOGGING_FUNC_DEF(SIGNATURE, ...) \
+    extern SIGNATURE;
 #  define LOGGING_FUNC_DCL(SIGNATURE) \
     extern SIGNATURE;
 # else
@@ -168,7 +168,7 @@ typedef struct log_record
 
     struct log_record_format *fmt;
 
-    size_t mem_size;
+    int mem_size;
     int message_size;
     int message_len;
     char message;
@@ -196,6 +196,8 @@ typedef struct log_logger
     int level;
     const char *levelflag;
     const char *fileline;
+    const char *flie;
+    int line;
     const char *function;
     size_t format_count;
     const char *format_conf;
@@ -334,12 +336,18 @@ LOGGING_FUNC_DCL(void *LOGGING_RECORD_MALLOC(log_record_t *r, size_t size));
   } \
   )
 
-///// LOGGING_FMT_DEF
+///// LOGGING_FORMAT_REGISTER
 # define LOGGING_FMT_DEF(FIELD, SFIELD, NAME, TYPE, COLLECT, FMT, ...) \
   LOGGING_FORMAR_GET(FIELD, SFIELD, TYPE) \
   LOGGING_FORMAT_FORMAT(FIELD, TYPE, FMT, ##__VA_ARGS__) \
   LOGGING_FORMAT_SET(FIELD, SFIELD, TYPE, NAME) \
   LOGGING_FORMAT_INIT(FIELD, COLLECT)
+# ifdef LOGGING_EVIL_MODE
+#  define LOGGING_FORMAT_REGISTER(FIELD, NAME, TYPE, COLLECT, FMT, ...) \
+    LOGGING_FMT_DEF(FIELD, _, NAME, TYPE, COLLECT, FMT, ##__VA_ARGS__)
+# else
+#  define LOGGING_FORMAT_REGISTER(...)
+# endif
 
 /// Level Flag
 # if defined(LOGGING_LOG_LEVELFLAG) || defined(LOGGING_AS_SOURCE)
@@ -513,7 +521,7 @@ LOGGING_FUNC_DCL(void *LOGGING_RECORD_MALLOC(log_record_t *r, size_t size));
 #   define LOGGING_COLOR_SET(color) do \
     { \
         HANDLE handle = GetStdHandle(STD_OUTPUT_HANDLE); \
-        SetConsoleTextAttribute(handle, (int)color); \
+        SetConsoleTextAttribute(handle, (int)(uint64_t)(color)); \
     } while (0)
 #  else
 #   error Not support platform
@@ -650,6 +658,8 @@ void LOGGING_INIT_FORMAT_DYNAMIC(struct log_record *r, struct log_logger *l),
     LOGGING_LOGGER_GET_LEVELFLAG(l); \
     (l)->fileline = __FILE__ "(" LOGGING_STR(__LINE__) ")"; \
     (l)->function = __FUNCTION__; \
+    (l)->flie = __FILE__; \
+    (l)->line = __LINE__; \
   } while (0)
 /// logger_add_format
 LOGGING_FUNC_DEF(
@@ -697,7 +707,13 @@ log_format_init_t LOGGING_LOGGER_GET_FORMAT(struct log_logger *l,
 } while (0)
 
 /// logger_add_custom_format
-# ifndef LOGGING_LOGGER_ADD_CUSTOM_FORMAT
+# ifdef LOGGING_CONF_DYNAMIC_LOG_FORMAT
+#  ifdef LOGGING_LOGGER_ADD_CUSTOM_FORMAT_AS_FUNCTION
+    extern void LOGGING_LOGGER_ADD_CUSTOM_FORMAT(log_logger_t *l);
+#  elif !defined(LOGGING_LOGGER_ADD_CUSTOM_FORMAT)
+#   define LOGGING_LOGGER_ADD_CUSTOM_FORMAT(l)
+#  endif
+# else
 #  define LOGGING_LOGGER_ADD_CUSTOM_FORMAT(l)
 # endif
 /// init_logger
@@ -814,7 +830,7 @@ void *LOGGING_RECORD_MALLOC(log_record_t *r, size_t size),
     if (r->message_size < size) {
         return NULL;
     }
-    r->message_size -= size;
+    r->message_size -= (int)size;
 
     return msg_end-size;
 }

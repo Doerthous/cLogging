@@ -37,29 +37,40 @@ endif
 
 TARGETS += basic
 TARGETS += basic_e
+TARGETS += basic_c
 TARGETS += extend
 TARGETS += extend_e
+TARGETS += extend_c
 TARGETS += format
 TARGETS += format_e
+TARGETS += format_c
 TARGETS += threading
 TARGETS += threading_e
+TARGETS += threading_c
 TARGETS += logfile
 TARGETS += logfile_e
+TARGETS += logfile_c
 TARGETS += color
 TARGETS += color_e
+TARGETS += color_c
 TARGETS += multidir
 TARGETS += multidir_e
+TARGETS += multidir_c
 
 all: $(TARGETS)
 
-logging.eo: $(SRC_DIR)/logging.c
-	gcc -g -std=c99 -I$(INC) -c $^ -o $@
 %.eo: $(SRC_DIR)/%.c
 	gcc -g -DLOGGING_AS_HEADER -std=c99 -I$(INC) -c $^ -o $@
 %.eo: $(SRC_DIR)/%.cpp
 	g++ -g -DLOGGING_AS_HEADER -std=gnu++11 -I$(INC) $(LIB) -c $^ -o $@
+%.co: $(SRC_DIR)/%.c
+	gcc -g -DLOGGING_AS_HEADER -DLOGGING_LOGGER_ADD_CUSTOM_FORMAT_AS_FUNCTION -std=c99 -I$(INC) -c $^ -o $@
+%.co: $(SRC_DIR)/%.cpp
+	g++ -g -DLOGGING_AS_HEADER -DLOGGING_LOGGER_ADD_CUSTOM_FORMAT_AS_FUNCTION -std=gnu++11 -I$(INC) $(LIB) -c $^ -o $@
 
 %_e: logging.eo %.eo
+	g++ $(LIB) $^ -o $@
+%_c: custom.co %.co
 	g++ $(LIB) $^ -o $@
 %: $(SRC_DIR)/%.c ../../Logging.h
 	gcc -std=c99 -I$(INC) $< -o $@
